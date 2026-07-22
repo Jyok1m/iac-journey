@@ -1,0 +1,27 @@
+---
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: check-vault-encrypted
+        name: ansible-vault must be encrypted
+        entry: ansible/scripts/check-vault.sh
+        language: script
+        files: 'vault.*\.ya?ml$'
+      - id: no-plain-env
+        name: refuse plain .env files
+        entry: ansible/scripts/check-env.sh
+        language: script
+        files: '(^|/)\.env(\..+)?$'
+        exclude: '\.env\.example$'

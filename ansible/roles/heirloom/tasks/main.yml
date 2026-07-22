@@ -1,0 +1,46 @@
+---
+- name: Create directory in /opt if it does not exist
+  ansible.builtin.file:
+    path: "/opt/{{ app_name }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy env file with backup
+  ansible.builtin.copy:
+    src: .env
+    dest: "/opt/{{ app_name }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+    backup: yes
+
+- name: Render template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "/opt/{{ app_name }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "/opt/{{ app_name }}"
+  register: _docker_compose_pull
+
+- name: Run migrations
+  ansible.builtin.command:
+    cmd: docker compose --project-directory /opt/{{ app_name }} run --rm migrate
+  register: _migrate
+  changed_when: true
+
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "/opt/{{ app_name }}"
+    state: present
+    recreate: "{{ 'always' if (_docker_compose_pull.changed | default(false)) else 'auto' }}"
+    wait: true
+    wait_timeout: 120
+  register: _deployment_result
+
+- name: "Show deployment result"
+  ansible.builtin.debug:
+    msg: "{{ _deployment_result.actions | default('No changes') }}"
+  when: _deployment_result.changed

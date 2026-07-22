@@ -1,0 +1,20 @@
+---
+all:
+  children:
+    portfolio:
+      hosts:
+        main:
+          # Vault
+          ansible_user: "{{ ansible_user }}"
+          ansible_ssh_private_key_file: "{{ ansible_ssh_private_key_file }}"
+          # Vars
+          ansible_host: "{{ ansible_host }}"
+          ansible_port: "{{ ansible_port }}"
+  vars:
+    ansible_become: true
+    ansible_become_method: sudo
+    ansible_deprecation_warnings: false
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+    ansible_python_interpreter: /usr/bin/python3
+    vrack_cidr: 24
+    vrack_mtu: 1500

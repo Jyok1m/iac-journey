@@ -1,0 +1,3 @@
+# Ansible secrets
+**/files/.env
+.vault_pass
