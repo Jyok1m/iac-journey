@@ -84,6 +84,7 @@ services:
   web:
     image: jyok1m/heirloom-web:main
     restart: unless-stopped
+    env_file: .env.web
     depends_on:
       - app
     networks:

@@ -12,6 +12,13 @@
     mode: "0644"
     backup: yes
 
+- name: Copy env file for web with backup
+  ansible.builtin.copy:
+    src: .env.web
+    dest: "/opt/{{ app_name }}/.env.web"
+    mode: "0644"
+    backup: yes
+
 - name: Render template
   ansible.builtin.template:
     src: docker-compose.yml.j2
