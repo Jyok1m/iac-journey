@@ -69,7 +69,6 @@ services:
     image: jyok1m/heirloom-app:main
     container_name: heirloom-app
     restart: unless-stopped
-    # nginx proxies /api and /graphql to the `api` service (see nginx.conf).
     depends_on:
       - api
     networks:
@@ -78,6 +77,21 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.heirloom.rule=Host(`heirloom.{{ portfolio_domain_com }}`) || Host(`heirloom.{{ portfolio_domain_fr }}`)
+      - traefik.http.routers.heirloom.entrypoints=websecure
+      - traefik.http.routers.heirloom.tls.certresolver=letsencrypt
+      - traefik.http.services.heirloom.loadbalancer.server.port=80
+
+  web:
+    image: jyok1m/heirloom-web:main
+    restart: unless-stopped
+    depends_on:
+      - app
+    networks:
+      - heirloom
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.heirloom.rule=Host(`{{ heirloom_domain }}`)
       - traefik.http.routers.heirloom.entrypoints=websecure
       - traefik.http.routers.heirloom.tls.certresolver=letsencrypt
       - traefik.http.services.heirloom.loadbalancer.server.port=80
