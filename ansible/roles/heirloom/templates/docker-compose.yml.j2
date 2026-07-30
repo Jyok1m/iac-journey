@@ -20,7 +20,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-heirloom}
     volumes:
       - db_data:/var/lib/postgresql
-    networks: [heirloom]
+    networks: [private]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-heirloom}"]
       interval: 5s
@@ -39,7 +39,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    networks: [heirloom]
+    networks: [private]
     restart: "no"
 
   api:
@@ -56,6 +56,7 @@ services:
       db:
         condition: service_healthy
     networks:
+      - private
       - heirloom
       - traefik-public
     labels:
@@ -84,20 +85,19 @@ services:
   web:
     image: jyok1m/heirloom-web:main
     restart: unless-stopped
-    env_file: .env.web
     depends_on:
       - app
     networks:
-      - heirloom
       - traefik-public
     labels:
       - traefik.enable=true
-      - traefik.http.routers.heirloom.rule=Host(`{{ heirloom_domain }}`)
-      - traefik.http.routers.heirloom.entrypoints=websecure
-      - traefik.http.routers.heirloom.tls.certresolver=letsencrypt
-      - traefik.http.services.heirloom.loadbalancer.server.port=80
+      - traefik.http.routers.heirloom-web.rule=Host(`{{ heirloom_domain }}`)
+      - traefik.http.routers.heirloom-web.entrypoints=websecure
+      - traefik.http.routers.heirloom-web.tls.certresolver=letsencrypt
+      - traefik.http.services.heirloom-web.loadbalancer.server.port=80
 
 networks:
+  private:
   heirloom:
   traefik-public:
     name: traefik-public
