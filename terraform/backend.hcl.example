@@ -1,0 +1,3 @@
+# Secrets for Cloudflare R2 S3 Bucket
+access_key = "..."
+secret_key = "..."
