@@ -1,3 +1,27 @@
 # Ansible secrets
 **/files/.env*
 .vault_pass
+
+# Terraform
+*.tfstate
+*.tfstate.*
+
+# secrets
+*.tfvars
+!*.tfvars.example
+!zones.auto.tfvars
+backend.hcl
+.envrc
+
+# plans
+tfplan
+*.tfplan
+
+# local
+.terraform/
+.terraformrc
+terraform.rc
+crash.log
+*_override.tf
+override.tf
+override.tf.json
