@@ -1,0 +1,84 @@
+---
+services:
+  postgres:
+    image: {{ keycloak_pg_image }}
+    container_name: {{ keycloak_pg_container_name }}
+    restart: unless-stopped
+    env_file: {{ keycloak_pg_env_file }}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=50
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 1m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+
+  keycloak:
+    image: {{ keycloak_image }}
+    container_name: {{ keycloak_container_name }}
+    restart: unless-stopped
+    command: start
+    env_file: {{ keycloak_env_file }}
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 768M
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q 'UP' <&3"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ keycloak_container_name }}.rule={{ keycloak_router }}
+      - traefik.http.routers.{{ keycloak_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ keycloak_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ keycloak_container_name }}.loadbalancer.server.port=8080
+
+volumes:
+  postgres-data:
+    name: keycloak_postgres-data
+
+networks:
+  internal:
+    name: keycloak_internal
+    internal: true
+  traefik-public:
+    external: true

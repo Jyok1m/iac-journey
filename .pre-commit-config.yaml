@@ -1,4 +1,6 @@
 ---
+exclude: '^ansible/roles/.*/files/.*\.enc$'
+
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
@@ -9,8 +11,19 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
+      - id: detect-private-key
+      - id: mixed-line-ending
       - id: end-of-file-fixer
+        exclude: '(vault.*\.ya?ml|^vault/)'
       - id: trailing-whitespace
+        exclude: '(vault.*\.ya?ml|^vault/)'
+      - id: check-yaml
+        exclude: '(vault.*\.ya?ml|^vault/|\.j2$)'
+
+  - repo: https://github.com/ansible/ansible-lint
+    rev: v25.9.2
+    hooks:
+      - id: ansible-lint
 
   - repo: local
     hooks:
@@ -18,10 +31,11 @@ repos:
         name: ansible-vault must be encrypted
         entry: ansible/scripts/check-vault.sh
         language: script
-        files: 'vault.*\.ya?ml$'
+        files: '((^|/)vaults?/.*\.ya?ml$|(^|/)vault[^/]*\.ya?ml$)'
+
       - id: no-plain-env
         name: refuse plain .env files
         entry: ansible/scripts/check-env.sh
         language: script
-        files: '(^|/)\.env(\..+)?$'
-        exclude: '\.env\.example$'
+        files: '(^|/)[^/]*\.env(\.[^/]*)?$'
+        exclude: '(\.j2$|\.example$|\.sample$)'

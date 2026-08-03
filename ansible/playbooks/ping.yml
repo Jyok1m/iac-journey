@@ -1,5 +1,0 @@
----
-- hosts: portfolio
-  tasks:
-    - name: Test if hosts are reachable and alive
-      ansible.builtin.ping: ~

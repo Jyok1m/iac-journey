@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-fail=0
+rc=0
 for f in "$@"; do
-  [ -f "$f" ] || continue
-  if ! head -c 20 "$f" | grep -q "^\$ANSIBLE_VAULT"; then
-    echo "REFUSE: $f nest pas chiffre (ansible-vault)."
-    fail=1
+  if ! head -n1 "$f" | grep -q '^\$ANSIBLE_VAULT;'; then
+    echo "not encrypted: $f" >&2
+    rc=1
   fi
 done
-exit $fail
+exit $rc

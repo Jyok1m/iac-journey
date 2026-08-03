@@ -1,2 +1,3 @@
 ---
-app_name: komodo
+komodo_app_name: komodo
+komodo_app_dir: /opt/{{ komodo_app_name }}

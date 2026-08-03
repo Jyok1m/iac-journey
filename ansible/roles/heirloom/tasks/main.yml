@@ -1,51 +1,45 @@
 ---
 - name: Create directory in /opt if it does not exist
   ansible.builtin.file:
-    path: "/opt/{{ app_name }}"
+    path: "{{ heirloom_app_dir }}"
     state: directory
     mode: "0755"
 
 - name: Copy env file with backup
   ansible.builtin.copy:
     src: .env
-    dest: "/opt/{{ app_name }}/.env"
+    dest: "{{ heirloom_app_dir }}/.env"
     mode: "0644"
-    backup: yes
+    backup: true
 
 - name: Copy env file for web with backup
   ansible.builtin.copy:
     src: .env.web
-    dest: "/opt/{{ app_name }}/.env.web"
+    dest: "{{ heirloom_app_dir }}/.env.web"
     mode: "0644"
-    backup: yes
+    backup: true
 
 - name: Render template
   ansible.builtin.template:
     src: docker-compose.yml.j2
-    dest: "/opt/{{ app_name }}/docker-compose.yml"
+    dest: "{{ heirloom_app_dir }}/docker-compose.yml"
     mode: "0644"
 
 - name: Pull images
   community.docker.docker_compose_v2_pull:
-    project_src: "/opt/{{ app_name }}"
-  register: _docker_compose_pull
+    project_src: "{{ heirloom_app_dir }}"
+  register: heirloom_docker_compose_pull
 
 - name: Run migrations
   ansible.builtin.command:
-    cmd: docker compose --project-directory /opt/{{ app_name }} run --rm migrate
-  register: _migrate
+    cmd: docker compose --project-directory {{ heirloom_app_dir }} run --rm migrate
+  register: heirloom_migrate
   changed_when: true
 
 - name: Deploy services
   community.docker.docker_compose_v2:
-    project_src: "/opt/{{ app_name }}"
+    project_src: "{{ heirloom_app_dir }}"
     state: present
-    recreate: "{{ 'always' if (_docker_compose_pull.changed | default(false)) else 'auto' }}"
+    recreate: "{{ 'always' if (heirloom_docker_compose_pull.changed | default(false)) else 'auto' }}"
     wait: true
     wait_timeout: 120
-  register: _deployment_result
-
-- name: "Show deployment result"
-  ansible.builtin.debug:
-    msg: "{{ _deployment_result.actions | default('No changes') }}"
-  when: _deployment_result.changed

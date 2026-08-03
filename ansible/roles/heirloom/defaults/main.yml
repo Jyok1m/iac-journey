@@ -1,2 +1,3 @@
 ---
-app_name: heirloom
+heirloom_app_name: heirloom
+heirloom_app_dir: /opt/{{ heirloom_app_name }}

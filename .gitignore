@@ -1,5 +1,5 @@
 # Ansible secrets
-**/files/.env*
+**/files/*.env*
 !**/files/.env.example
 .vault_pass
 

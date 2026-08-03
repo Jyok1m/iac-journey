@@ -1,4 +1,0 @@
----
-- hosts: portfolio
-  roles:
-    - role: heirloom

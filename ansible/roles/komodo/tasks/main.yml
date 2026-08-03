@@ -1,32 +1,26 @@
 ---
 - name: Create directory in /opt if it does not exist
   ansible.builtin.file:
-    path: "/opt/{{ app_name }}"
+    path: "{{ komodo_app_dir }}"
     state: directory
     mode: "0755"
 
 - name: Copy env file with backup
   ansible.builtin.copy:
     src: .env
-    dest: "/opt/{{ app_name }}/.env"
+    dest: "{{ komodo_app_dir }}/.env"
     mode: "0644"
 
 - name: Render template
   ansible.builtin.template:
     src: docker-compose.yml.j2
-    dest: "/opt/{{ app_name }}/docker-compose.yml"
+    dest: "{{ komodo_app_dir }}/docker-compose.yml"
     mode: "0644"
 
 - name: Deploy services
   community.docker.docker_compose_v2:
-    project_src: "/opt/{{ app_name }}"
+    project_src: "{{ komodo_app_dir }}"
     state: present
     recreate: auto
     wait: true
     wait_timeout: 120
-  register: _deployment_result
-
-- name: "Show deployment result"
-  ansible.builtin.debug:
-    msg: "{{ _deployment_result.actions | default('No changes') }}"
-  when: _deployment_result.changed

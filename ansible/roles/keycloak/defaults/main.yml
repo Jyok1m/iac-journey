@@ -1,0 +1,15 @@
+---
+# Default Role
+keycloak_app_name: keycloak
+keycloak_app_dir: /opt/{{ keycloak_app_name }}
+
+# Service Postgres
+keycloak_pg_image: postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+keycloak_pg_container_name: keycloak-db
+keycloak_pg_env_file: keycloak-db.env
+
+# Service Keycloak
+keycloak_image: quay.io/keycloak/keycloak:26.7@sha256:0f198be292568439d700cdbfb893e69a6009bb43a94a06a945b1d3d506c76b13
+keycloak_container_name: keycloak
+keycloak_env_file: keycloak.env
+keycloak_router: Host(`sso.{{ portfolio_domain_com }}`)
