@@ -1,0 +1,5 @@
+- name: Install system apps
+  hosts: portfolio
+  roles:
+    - { role: komodo }
+  tags: [system-apps]
