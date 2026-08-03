@@ -1,3 +1,5 @@
 ---
+# Default Role
 komodo_app_name: komodo
 komodo_app_dir: /opt/{{ komodo_app_name }}
+komodo_env_file: "{{ komodo_app_name }}.env"

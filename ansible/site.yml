@@ -2,6 +2,7 @@
   hosts: portfolio
   vars_files:
     - vaults/keycloak.yml
+    - vaults/komodo.yml
   roles:
     - keycloak
     - komodo
