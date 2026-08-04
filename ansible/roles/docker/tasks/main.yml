@@ -22,13 +22,36 @@
     group: root
     mode: "0644"
 
-# dpkg's name for the architecture is not the kernel's: amd64, not x86_64. The
-# apt source needs dpkg's, so ask dpkg rather than deriving it from facts.
+# The apt source needs two things the host has to answer for itself: dpkg's
+# spelling of the architecture (amd64, where the kernel says x86_64) and the
+# distribution codename. Both are read directly instead of through gathered
+# facts, so the role behaves the same whatever the calling play does about
+# fact gathering.
 - name: Read the dpkg architecture
   ansible.builtin.command: dpkg --print-architecture
   register: docker_dpkg_arch
   changed_when: false
   check_mode: false
+
+- name: Read the distribution codename
+  ansible.builtin.shell:
+    cmd: . /etc/os-release && printf '%s' "$VERSION_CODENAME"
+    executable: /bin/bash
+  register: docker_codename
+  changed_when: false
+  check_mode: false
+
+# An empty codename would render `Suites:` blank, which apt accepts and then
+# silently resolves to nothing useful.
+- name: Validate what the host reported
+  ansible.builtin.assert:
+    that:
+      - docker_dpkg_arch.stdout | length > 0
+      - docker_codename.stdout | length > 0
+    fail_msg: >-
+      Could not determine the architecture ({{ docker_dpkg_arch.stdout | default('') }})
+      or the codename ({{ docker_codename.stdout | default('') }}) of this host.
+    quiet: true
 
 - name: Render the Docker apt source
   ansible.builtin.template:
@@ -37,8 +60,6 @@
     owner: root
     group: root
     mode: "0644"
-  vars:
-    docker_dpkg_architecture: "{{ docker_dpkg_arch.stdout }}"
 
 - name: Install the Docker engine and the Compose plugin
   ansible.builtin.apt:

@@ -1,7 +1,7 @@
 # Ansible managed — do not edit manually
 Types: deb
 URIs: {{ docker_repo_url }}
-Suites: {{ ansible_facts['distribution_release'] }}
+Suites: {{ docker_codename.stdout }}
 Components: {{ docker_repo_components }}
-Architectures: {{ docker_dpkg_architecture }}
+Architectures: {{ docker_dpkg_arch.stdout }}
 Signed-By: {{ docker_keyring_path }}
