@@ -1,0 +1,15 @@
+[Unit]
+Description=Mongo dump + restic push ({{ backup_mongo_name }})
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+ConditionPathExists=/usr/local/bin/backup-mongo-dump-{{ backup_mongo_name }}.sh
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/backup-mongo-{{ backup_mongo_name }}.env
+ExecStart=/usr/local/bin/backup-mongo-dump-{{ backup_mongo_name }}.sh
+# A dump competes with the live workload for disk: keep it out of the way.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=2h

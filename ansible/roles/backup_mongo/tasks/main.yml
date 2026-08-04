@@ -1,0 +1,72 @@
+---
+- name: Validate backup inputs for {{ backup_mongo_name }}
+  ansible.builtin.assert:
+    that:
+      - backup_mongo_name | length > 0
+      - backup_mongo_name is match('^[a-z0-9][a-z0-9_-]*$')
+      - backup_mongo_username | length > 0
+      - backup_mongo_password | length > 0
+      - backup_mongo_restic_repo | length > 0
+      - backup_mongo_restic_password | length > 0
+    fail_msg: >-
+      backup_mongo needs a name matching [a-z0-9_-], Mongo credentials, and a
+      restic repository with its password.
+    quiet: true
+
+- name: Install restic for {{ backup_mongo_name }}
+  ansible.builtin.apt:
+    name: "{{ backup_mongo_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create staging directory for {{ backup_mongo_name }}
+  ansible.builtin.file:
+    path: "{{ backup_mongo_local_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Deploy env file for {{ backup_mongo_name }}
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: /etc/backup-mongo-{{ backup_mongo_name }}.env
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Deploy dump and restore scripts for {{ backup_mongo_name }}
+  ansible.builtin.template:
+    src: "{{ item }}.sh.j2"
+    dest: /usr/local/bin/backup-mongo-{{ item }}-{{ backup_mongo_name }}.sh
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - dump
+    - restore
+
+- name: Deploy systemd units for {{ backup_mongo_name }}
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: /etc/systemd/system/backup-mongo-{{ backup_mongo_name }}.{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - service
+    - timer
+  notify: Reload systemd for backup_mongo
+
+# The timer below is enabled in the same run, so the unit files it points at
+# must already be known to systemd.
+- name: Apply pending unit changes for {{ backup_mongo_name }}
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the dump timer for {{ backup_mongo_name }}
+  ansible.builtin.systemd_service:
+    name: backup-mongo-{{ backup_mongo_name }}.timer
+    state: "{{ backup_mongo_timer_state }}"
+    enabled: "{{ backup_mongo_timer_enabled }}"

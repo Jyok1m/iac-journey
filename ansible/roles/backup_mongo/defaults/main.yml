@@ -1,0 +1,46 @@
+---
+# Required. Used in the unit, script and env file names, so it must stay
+# restricted to [a-z0-9_-] — asserted by the role.
+backup_mongo_name: ""
+
+# Target container. Reached over a Docker network, never over a published port:
+# the dump runner joins the stack's own network instead of crossing the host.
+backup_mongo_container: "{{ backup_mongo_name }}-db"
+backup_mongo_network: "{{ backup_mongo_name }}-internal"
+backup_mongo_image: mongo:8.2.5@sha256:60aa240412f473f672ec8b282fd5651aa156dcc7a220f81f5381ce768ccc3167
+backup_mongo_port: 27017
+
+# Credentials — required.
+backup_mongo_username: ""
+backup_mongo_password: ""
+backup_mongo_authdb: admin
+# Empty dumps every database on the instance.
+backup_mongo_db: ""
+
+# Local staging area, root-only. Archives are trimmed after a successful push.
+backup_mongo_local_dir: /var/backups/mongo/{{ backup_mongo_name }}
+backup_mongo_local_keep: 2
+
+# Restic repository — required.
+backup_mongo_restic_repo: ""
+backup_mongo_restic_password: ""
+# Backend credentials handed to restic, shape { KEY: value }.
+backup_mongo_restic_env: {}
+backup_mongo_restic_init: true
+
+# Retention applied after every successful push.
+backup_mongo_keep_daily: 7
+backup_mongo_keep_weekly: 4
+backup_mongo_keep_monthly: 12
+
+# Schedule — see `man systemd.time` for the OnCalendar syntax.
+backup_mongo_on_calendar: daily
+backup_mongo_randomized_delay: 30min
+# Catch up on a run missed while the host was down.
+backup_mongo_persistent: true
+
+backup_mongo_packages:
+  - restic
+
+backup_mongo_timer_state: started
+backup_mongo_timer_enabled: true

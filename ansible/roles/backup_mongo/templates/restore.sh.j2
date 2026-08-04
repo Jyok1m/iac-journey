@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Managed by Ansible — backup_mongo ({{ backup_mongo_name }})
+#
+# Usage:
+#   sudo backup-mongo-restore-{{ backup_mongo_name }}.sh <snapshot-id|latest> [--drop] [--yes]
+#
+# Resolves the requested restic snapshot, materializes the archive locally and
+# pipes it into mongorestore against the target container. --yes skips the
+# confirmation prompt, for automated restore drills.
+set -euo pipefail
+
+NAME="{{ backup_mongo_name }}"
+LOCAL_DIR="{{ backup_mongo_local_dir }}/restore"
+CONTAINER="{{ backup_mongo_container }}"
+NETWORK="{{ backup_mongo_network }}"
+IMAGE="{{ backup_mongo_image }}"
+PORT="{{ backup_mongo_port }}"
+AUTHDB="{{ backup_mongo_authdb }}"
+DB="{{ backup_mongo_db }}"
+
+ENV_FILE="/etc/backup-mongo-${NAME}.env"
+if [[ ! -r "${ENV_FILE}" ]]; then
+  echo "[${NAME}] env file ${ENV_FILE} is not readable" >&2
+  exit 1
+fi
+set -a
+# shellcheck disable=SC1090
+source "${ENV_FILE}"
+set +a
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <snapshot-id|latest> [--drop] [--yes]" >&2
+  exit 64
+fi
+SNAP="$1"
+shift
+
+DROP="false"
+ASSUME_YES="false"
+for arg in "$@"; do
+  case "${arg}" in
+    --drop) DROP="true" ;;
+    --yes | -y) ASSUME_YES="true" ;;
+    *)
+      echo "Unknown argument: ${arg}" >&2
+      exit 64
+      ;;
+  esac
+done
+
+mkdir -p "${LOCAL_DIR}"
+chmod 0700 "${LOCAL_DIR}"
+
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+WORKDIR="${LOCAL_DIR}/${TS}-${SNAP}"
+mkdir -p "${WORKDIR}"
+
+echo "[${NAME}] resolving snapshot ${SNAP}"
+restic snapshots --tag "${NAME}" --json "${SNAP}" >/dev/null
+
+echo "[${NAME}] restoring snapshot ${SNAP} → ${WORKDIR}"
+restic restore "${SNAP}" --target "${WORKDIR}" --tag "${NAME}"
+
+ARCHIVE="$(find "${WORKDIR}" -type f -name "${NAME}-*.archive.gz" | head -n 1)"
+if [[ -z "${ARCHIVE}" ]]; then
+  echo "[${NAME}] no archive found in ${WORKDIR}" >&2
+  exit 2
+fi
+
+RESTORE_ARGS=(
+  --host "${CONTAINER}:${PORT}"
+  --username "${MONGO_USERNAME}"
+  --password "${MONGO_PASSWORD}"
+  --authenticationDatabase "${AUTHDB}"
+  --archive
+  --gzip
+)
+if [[ -n "${DB}" ]]; then
+  RESTORE_ARGS+=(--nsInclude "${DB}.*")
+fi
+if [[ "${DROP}" == "true" ]]; then
+  RESTORE_ARGS+=(--drop)
+fi
+
+if [[ "${ASSUME_YES}" != "true" ]]; then
+  read -r -p "[${NAME}] About to mongorestore ${ARCHIVE} into ${CONTAINER} (drop=${DROP}). Continue? [y/N] " ans
+  if [[ "${ans}" != "y" && "${ans}" != "Y" ]]; then
+    echo "[${NAME}] aborted" >&2
+    exit 1
+  fi
+fi
+
+echo "[${NAME}] mongorestore"
+docker run --rm -i --network "${NETWORK}" "${IMAGE}" \
+  mongorestore "${RESTORE_ARGS[@]}" < "${ARCHIVE}"
+
+echo "[${NAME}] cleanup ${WORKDIR}"
+rm -rf "${WORKDIR}"
+
+echo "[${NAME}] done"

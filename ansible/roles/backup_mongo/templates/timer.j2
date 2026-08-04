@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule for the Mongo dump + restic push ({{ backup_mongo_name }})
+
+[Timer]
+OnCalendar={{ backup_mongo_on_calendar }}
+RandomizedDelaySec={{ backup_mongo_randomized_delay }}
+Persistent={{ 'true' if backup_mongo_persistent else 'false' }}
+Unit=backup-mongo-{{ backup_mongo_name }}.service
+
+[Install]
+WantedBy=timers.target
