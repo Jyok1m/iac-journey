@@ -1,0 +1,9 @@
+---
+# Default Role
+portfolio_app_name: portfolio
+portfolio_app_dir: /opt/{{ portfolio_app_name }}
+
+# Service Portfolio
+portfolio_image: jyok1m/portfolio:latest
+portfolio_container_name: portfolio
+portfolio_router: Host(`{{ portfolio_domain_com }}`) || Host(`{{ portfolio_domain_fr }}`)

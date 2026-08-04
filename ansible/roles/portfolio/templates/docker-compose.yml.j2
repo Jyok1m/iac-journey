@@ -1,0 +1,32 @@
+---
+services:
+  portfolio:
+    image: {{ portfolio_image }}
+    container_name: {{ portfolio_container_name }}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ portfolio_container_name }}.rule={{ portfolio_router }}
+      - traefik.http.routers.{{ portfolio_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ portfolio_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ portfolio_container_name }}.loadbalancer.server.port=3000
+
+networks:
+  traefik-public:
+    name: traefik-public
+    external: true
