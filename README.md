@@ -4,19 +4,34 @@ Infrastructure du serveur portfolio : DNS Cloudflare géré par Terraform, stack
 Docker déployées par Ansible sur un serveur OVH unique (`main`, groupe
 `portfolio`).
 
+## Configuration de l'hôte
+
+| Rôle        | Rôle joué                                                    |
+| ----------- | ------------------------------------------------------------ |
+| `hardening` | sshd durci, ufw, fail2ban                                     |
+| `vrack`     | netplan de l'interface vRack (réseau privé OVH)               |
+| `traefik`   | reverse proxy, TLS Let's Encrypt, réseau `traefik-public`     |
+
 ## Stacks déployées
 
-| Rôle        | Contenu                               | URL                     |
-| ----------- | ------------------------------------- | ----------------------- |
-| `keycloak`  | Keycloak + PostgreSQL                 | `sso.<domaine>`         |
-| `komodo`    | Komodo Core + Periphery + MongoDB     | `komodo.<domaine>`      |
-| `heirloom`  | API + app + site vitrine + PostgreSQL | `heirloom*.<domaine>`   |
-| `portfolio` | Site personnel                        | apex `.com` et `.fr`    |
-| `ipseis`    | API + MongoDB, en prod et en dev      | `ipseis-backend*.<dom>` |
+| Rôle         | Contenu                                     | URL                     |
+| ------------ | ------------------------------------------- | ----------------------- |
+| `keycloak`   | Keycloak + PostgreSQL                       | `sso.<domaine>`         |
+| `komodo`     | Komodo Core + Periphery + MongoDB           | `komodo.<domaine>`      |
+| `jenkins`    | Jenkins + Docker-in-Docker                  | `jenkins.<domaine>`     |
+| `monitoring` | Prometheus + Grafana + node-exporter + cAdvisor | `grafana.<domaine>`  |
+| `heirloom`   | API + app + site vitrine + PostgreSQL       | `heirloom*.<domaine>`   |
+| `portfolio`  | Site personnel                              | apex `.com` et `.fr`    |
+| `n8n`        | n8n + PostgreSQL                            | `n8n.<domaine>`         |
+| `ipseis`     | API + MongoDB, en prod et en dev            | `ipseis-backend*.<dom>` |
 
 `backup_mongo` est un rôle utilitaire, pas une stack : il installe un timer
 systemd qui dump une base Mongo et pousse l'archive dans restic. `ipseis`
 l'appelle pour sa base ; il est réutilisable tel quel pour Komodo.
+
+`traefik` doit tourner avant toute stack applicative : c'est lui qui crée le
+réseau `traefik-public`, que les autres déclarent en `external: true`. L'ordre
+des plays dans `site.yml` le garantit.
 
 ## Prérequis
 
@@ -47,11 +62,20 @@ ansible-playbook ansible/site.yml
 Cibler une partie du déploiement :
 
 ```bash
-ansible-playbook ansible/site.yml --tags system-apps    # keycloak + komodo
-ansible-playbook ansible/site.yml --tags personal-apps  # heirloom + portfolio
+ansible-playbook ansible/site.yml --tags setup          # hardening + vrack
+ansible-playbook ansible/site.yml --tags edge           # traefik
+ansible-playbook ansible/site.yml --tags system-apps    # keycloak, komodo, jenkins, monitoring
+ansible-playbook ansible/site.yml --tags personal-apps  # heirloom, portfolio, n8n
 ansible-playbook ansible/site.yml --tags client-apps    # ipseis
 ansible-playbook ansible/site.yml --tags ipseis         # une seule stack
 ```
+
+Le tag `setup` est le seul qui peut te couper l'accès : il change le port
+d'écoute de sshd et active ufw. `hardening_ssh_port` est dérivé de
+`vault_ansible_port`, donc le port que sshd écoute et celui qu'Ansible compose
+sont la même variable — mais garde une session ouverte pendant le premier run,
+et vérifie que le port est bien dans `hardening_ufw_allowed_ports` avant de
+lancer.
 
 ## Sauvegardes Mongo
 
@@ -75,16 +99,16 @@ bases sauvegardées.
 
 ## Dépendances hors repo
 
-À connaître avant de croire que `site.yml` reconstruit une machine vierge — il
-ne le fait pas. Sont supposés déjà en place sur l'hôte :
+`site.yml` couvre maintenant le durcissement, le réseau vRack, le proxy et les
+stacks. Reste supposé déjà en place sur l'hôte :
 
-- Docker Engine + plugin Compose
-- Traefik, avec l'entrypoint `websecure` et le certresolver `letsencrypt`
-- le réseau Docker `traefik-public` (déclaré `external: true` dans les stacks)
-- le durcissement système (firewall, SSH, mises à jour automatiques)
+- **Docker Engine + plugin Compose** — aucun rôle ne les installe
+- **Mailcow**, dont le firewall ouvre les ports SMTP/IMAP/POP3 sans le déployer
+- **l'authentification au registre Docker**, nécessaire au push de l'image
+  Jenkins (`jenkins_image_push: false` pour s'en passer)
 
-Ces briques restent gérées par `portfolio-infra`, l'ancien dépôt : tant qu'elles
-n'ont pas été rapatriées ici, deux dépôts pilotent le même serveur.
+Sur une machine vierge il faut donc installer Docker avant le premier
+`site.yml`.
 
 ## Secrets
 
