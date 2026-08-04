@@ -1,0 +1,33 @@
+---
+# Each registry is opt-in. A disabled one is never validated and never logged
+# into, so leaving its credentials empty is fine.
+#
+# Credentials live in ansible/vaults/registries.yml. Use a token scoped to
+# pulling and pushing images, never an account password: this ends up in
+# /root/.docker/config.json on the host, base64-encoded and not encrypted.
+
+# ---------------------------- Docker Hub --------------------------- #
+docker_registries_dockerhub_enabled: true
+docker_registries_dockerhub_url: https://index.docker.io/v1/
+docker_registries_dockerhub_username: "{{ docker_registries_vault_dockerhub_username }}"
+# Docker Hub access token (Account Settings → Personal access tokens).
+docker_registries_dockerhub_password: "{{ docker_registries_vault_dockerhub_token }}"
+
+# ---------------------------- GitLab.com --------------------------- #
+docker_registries_gitlab_enabled: false
+docker_registries_gitlab_url: registry.gitlab.com
+docker_registries_gitlab_username: "{{ docker_registries_vault_gitlab_username }}"
+# Personal or deploy token carrying read_registry, plus write_registry to push.
+docker_registries_gitlab_password: "{{ docker_registries_vault_gitlab_token }}"
+
+# ------------------------ GitHub (ghcr.io) ------------------------- #
+docker_registries_github_enabled: false
+docker_registries_github_url: ghcr.io
+docker_registries_github_username: "{{ docker_registries_vault_github_username }}"
+# Classic PAT with read:packages, plus write:packages to push.
+docker_registries_github_password: "{{ docker_registries_vault_github_token }}"
+
+# community.docker.docker_login talks to the Docker API rather than shelling
+# out to the CLI, so the target host needs the Python HTTP stack.
+docker_registries_packages:
+  - python3-requests

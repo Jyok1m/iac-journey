@@ -1,0 +1,19 @@
+---
+docker_registries_all:
+  - name: Docker Hub
+    enabled: "{{ docker_registries_dockerhub_enabled | bool }}"
+    registry_url: "{{ docker_registries_dockerhub_url }}"
+    username: "{{ docker_registries_dockerhub_username }}"
+    password: "{{ docker_registries_dockerhub_password }}"
+
+  - name: GitLab.com
+    enabled: "{{ docker_registries_gitlab_enabled | bool }}"
+    registry_url: "{{ docker_registries_gitlab_url }}"
+    username: "{{ docker_registries_gitlab_username }}"
+    password: "{{ docker_registries_gitlab_password }}"
+
+  - name: GitHub Container Registry
+    enabled: "{{ docker_registries_github_enabled | bool }}"
+    registry_url: "{{ docker_registries_github_url }}"
+    username: "{{ docker_registries_github_username }}"
+    password: "{{ docker_registries_github_password }}"
