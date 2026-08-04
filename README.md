@@ -6,11 +6,13 @@ Docker déployées par Ansible sur un serveur OVH unique (`main`, groupe
 
 ## Configuration de l'hôte
 
-| Rôle        | Rôle joué                                                    |
-| ----------- | ------------------------------------------------------------ |
-| `hardening` | sshd durci, ufw, fail2ban                                     |
-| `vrack`     | netplan de l'interface vRack (réseau privé OVH)               |
-| `traefik`   | reverse proxy, TLS Let's Encrypt, réseau `traefik-public`     |
+| Rôle                | Rôle joué                                             |
+| ------------------- | ----------------------------------------------------- |
+| `hardening`         | sshd durci, ufw, fail2ban                             |
+| `vrack`             | netplan de l'interface vRack (réseau privé OVH)       |
+| `docker`            | Docker Engine + plugin Compose v2, depuis le dépôt apt Docker |
+| `docker_registries` | `docker login` sur les registres activés              |
+| `traefik`           | reverse proxy, TLS Let's Encrypt, réseau `traefik-public` |
 
 ## Stacks déployées
 
@@ -62,7 +64,8 @@ ansible-playbook ansible/site.yml
 Cibler une partie du déploiement :
 
 ```bash
-ansible-playbook ansible/site.yml --tags setup          # hardening + vrack
+ansible-playbook ansible/site.yml --tags setup          # hardening, vrack, docker, registres
+ansible-playbook ansible/site.yml --tags registries     # relogin sur les registres seuls
 ansible-playbook ansible/site.yml --tags edge           # traefik
 ansible-playbook ansible/site.yml --tags system-apps    # keycloak, komodo, jenkins, monitoring
 ansible-playbook ansible/site.yml --tags personal-apps  # heirloom, portfolio, n8n
@@ -97,18 +100,34 @@ Les identifiants restic et OVH S3 vivent dans `ansible/vaults/backups.yml`,
 séparés des secrets applicatifs parce qu'ils sont partagés entre toutes les
 bases sauvegardées.
 
+## Registres Docker
+
+Le rôle `docker_registries` fait le `docker login` sur l'hôte. Trois registres,
+chacun optionnel et désactivé par défaut sauf Docker Hub :
+
+| Registre   | Variable d'activation                   | URL                          |
+| ---------- | --------------------------------------- | ---------------------------- |
+| Docker Hub | `docker_registries_dockerhub_enabled`   | `https://index.docker.io/v1/` |
+| GitLab.com | `docker_registries_gitlab_enabled`      | `registry.gitlab.com`        |
+| GitHub     | `docker_registries_github_enabled`      | `ghcr.io`                    |
+
+Les identifiants vivent dans `ansible/vaults/registries.yml`. Ceux de GitLab et
+GitHub y sont présents mais vides : renseigne-les puis passe l'activation à
+`true`. Un registre activé sans identifiant fait échouer le play sur une
+assertion explicite, avant toute tentative de connexion.
+
+Utilise des jetons, pas des mots de passe de compte : `docker login` écrit dans
+`/root/.docker/config.json`, où les identifiants sont encodés en base64 et non
+chiffrés. Portées minimales : `read_registry` côté GitLab, `read:packages` côté
+GitHub, plus les équivalents en écriture seulement si tu pousses.
+
 ## Dépendances hors repo
 
-`site.yml` couvre maintenant le durcissement, le réseau vRack, le proxy et les
-stacks. Reste supposé déjà en place sur l'hôte :
+`site.yml` part maintenant d'une Debian nue : durcissement, réseau vRack,
+Docker, authentification aux registres, proxy, puis les stacks. Reste supposé
+en place :
 
-- **Docker Engine + plugin Compose** — aucun rôle ne les installe
 - **Mailcow**, dont le firewall ouvre les ports SMTP/IMAP/POP3 sans le déployer
-- **l'authentification au registre Docker**, nécessaire au push de l'image
-  Jenkins (`jenkins_image_push: false` pour s'en passer)
-
-Sur une machine vierge il faut donc installer Docker avant le premier
-`site.yml`.
 
 ## Secrets
 

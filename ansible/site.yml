@@ -5,9 +5,15 @@
 
 - name: Prepare the host
   hosts: portfolio
+  vars_files:
+    - vaults/registries.yml
   roles:
     - {role: hardening, tags: [hardening]}
     - {role: vrack, tags: [vrack]}
+    # Everything downstream shells out to docker compose, and the jenkins role
+    # adds its account to the docker group, so the engine comes first.
+    - {role: docker, tags: [docker]}
+    - {role: docker_registries, tags: [docker, registries]}
   tags: [setup]
 
 # ------------------------------------------------------------------ #
