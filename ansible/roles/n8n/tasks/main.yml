@@ -1,0 +1,41 @@
+---
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ n8n_app_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Deploy env files
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ n8n_app_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - "{{ n8n_db_env_file }}"
+    - "{{ n8n_env_file }}"
+  no_log: true
+
+- name: Deploy compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ n8n_app_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ n8n_app_dir }}"
+
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "{{ n8n_app_dir }}"
+    state: present
+    recreate: auto
+    remove_orphans: true
+    wait: true
+    wait_timeout: 300
