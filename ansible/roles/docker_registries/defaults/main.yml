@@ -37,3 +37,8 @@ docker_registries_packages:
 # so the credentials land in /home/<user>/.docker and root never sees them.
 # root's copy is the one that matters: the Jenkins image push runs as root.
 docker_registries_config_path: /root/.docker/config.json
+
+# The module skips a registry it already finds authenticated in the config
+# file. Set this to force it to re-authenticate and rewrite the entry:
+#   ansible-playbook ansible/site.yml --tags registries -e docker_registries_reauthorize=true
+docker_registries_reauthorize: false

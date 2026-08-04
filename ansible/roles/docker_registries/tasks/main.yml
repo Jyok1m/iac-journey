@@ -38,6 +38,7 @@
     username: "{{ item.username }}"
     password: "{{ item.password }}"
     config_path: "{{ docker_registries_config_path }}"
+    reauthorize: "{{ docker_registries_reauthorize | bool }}"
   loop: "{{ docker_registries_selected }}"
   loop_control:
     label: "{{ item.name }}"
