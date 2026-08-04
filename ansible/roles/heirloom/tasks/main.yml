@@ -45,17 +45,23 @@
     wait: true
     wait_timeout: 120
 
+# The image runs `prisma migrate deploy`, which is idempotent: it exits 0 with
+# "No pending migrations to apply." when the schema is already current. Parsing
+# that keeps the play honest instead of reporting a change on every run.
+# Left skipped under --check (the default for `command`): a dry run must not
+# migrate the production database.
 - name: Run migrations
   ansible.builtin.command:
     cmd: docker compose --project-directory {{ heirloom_app_dir }} run --rm --no-deps migrate
   register: heirloom_migrate
-  changed_when: true
+  changed_when: >-
+    'No pending migrations to apply' not in heirloom_migrate.stdout
 
 - name: Deploy services
   community.docker.docker_compose_v2:
     project_src: "{{ heirloom_app_dir }}"
     state: present
-    recreate: "{{ 'always' if (heirloom_docker_compose_pull.changed | default(false)) else 'auto' }}"
+    recreate: auto
     remove_orphans: true
     wait: true
     wait_timeout: 300
