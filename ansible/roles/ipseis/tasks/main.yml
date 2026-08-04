@@ -1,0 +1,72 @@
+---
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ ipseis_app_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+# Bind-mount sources. Docker would create them itself, but only as root-owned
+# directories at container start, which hides the ownership decision.
+- name: Create upload directories
+  ansible.builtin.file:
+    path: "{{ ipseis_app_dir }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop: >-
+    {{ ['uploads'] + (['uploads-dev'] if ipseis_dev_enabled else []) }}
+
+- name: Deploy env files
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ ipseis_app_dir }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: >-
+    {{ [ipseis_db_env_file, ipseis_api_env_file]
+       + ([ipseis_db_dev_env_file, ipseis_api_dev_env_file] if ipseis_dev_enabled else []) }}
+  no_log: true
+
+- name: Deploy compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ ipseis_app_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ ipseis_app_dir }}"
+
+# recreate stays on auto: Compose already recreates a container whose image ID
+# moved, so a new :latest push bounces the API without restarting the database.
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "{{ ipseis_app_dir }}"
+    state: present
+    recreate: auto
+    remove_orphans: true
+    wait: true
+    wait_timeout: 300
+
+- name: Schedule database dumps
+  ansible.builtin.include_role:
+    name: backup_mongo
+  vars:
+    backup_mongo_name: "{{ ipseis_app_name }}"
+    backup_mongo_container: "{{ ipseis_db_container_name }}"
+    backup_mongo_network: "{{ ipseis_app_name }}-internal"
+    backup_mongo_image: "{{ ipseis_db_image }}"
+    backup_mongo_username: "{{ ipseis_vault_db_root_user }}"
+    backup_mongo_password: "{{ ipseis_vault_db_root_password }}"
+    backup_mongo_restic_repo: "{{ ipseis_backup_restic_repo }}"
+    backup_mongo_restic_password: "{{ backup_mongo_vault_restic_password }}"
+    backup_mongo_restic_env:
+      AWS_ACCESS_KEY_ID: "{{ backup_mongo_vault_s3_access_key }}"
+      AWS_SECRET_ACCESS_KEY: "{{ backup_mongo_vault_s3_secret_key }}"
+    backup_mongo_on_calendar: "{{ ipseis_backup_on_calendar }}"

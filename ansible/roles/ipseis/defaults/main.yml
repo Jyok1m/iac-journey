@@ -1,0 +1,50 @@
+---
+# Default Role
+ipseis_app_name: ipseis
+ipseis_app_dir: /opt/{{ ipseis_app_name }}
+
+# Second copy of the stack on :dev images, pointed at the Vercel preview front.
+# Set to false to stop rendering and deploying it.
+ipseis_dev_enabled: true
+
+# Service Mongo
+# Kept on 8.2.5 deliberately: the running data directory was created by it, and
+# a version bump is a migration decision, not a deploy detail.
+ipseis_db_image: mongo:8.2.5@sha256:60aa240412f473f672ec8b282fd5651aa156dcc7a220f81f5381ce768ccc3167
+ipseis_db_container_name: ipseis-db
+ipseis_db_env_file: ipseis-db.env
+# Application database, shared by the prod and dev instances (each has its own
+# mongod, so the name does not need to differ).
+ipseis_db_name: ipseis
+ipseis_db_cache_gb: 1
+ipseis_db_dev_container_name: ipseis-db-dev
+ipseis_db_dev_env_file: ipseis-db-dev.env
+
+# Service API
+ipseis_api_image: jyok1m/ipseis-backend:latest
+ipseis_api_container_name: ipseis-api
+ipseis_api_env_file: ipseis-api.env
+# Heap capped below the cgroup limit so V8 fails with a JS stack trace instead
+# of being SIGKILLed by the kernel.
+ipseis_api_heap_mb: 768
+ipseis_api_memory: 1G
+ipseis_api_dev_image: jyok1m/ipseis-backend:dev
+ipseis_api_dev_container_name: ipseis-api-dev
+ipseis_api_dev_env_file: ipseis-api-dev.env
+
+# Application config
+ipseis_frontend_url: https://ipseis.fr
+ipseis_dev_frontend_url: https://ipseis-git-dev-joachim-jasmins-projects.vercel.app
+ipseis_nodemailer_email: ipseis.ne.pas.repondre@gmail.com
+ipseis_mail_to: helenedm@ipseis.fr
+ipseis_dev_mail_to: joachim.jasmin-dev@proton.me
+
+# Routing — the canonical host is the .fr, the .com permanently redirects to it.
+ipseis_api_host: ipseis-backend.{{ portfolio_domain_fr }}
+ipseis_api_redirect_host: ipseis-backend.{{ portfolio_domain_com }}
+ipseis_api_dev_host: ipseis-backend-dev.{{ portfolio_domain_fr }}
+ipseis_api_dev_redirect_host: ipseis-backend-dev.{{ portfolio_domain_com }}
+
+# Backups — restic repository holding the Mongo dumps.
+ipseis_backup_restic_repo: s3:https://s3.gra.io.cloud.ovh.net/{{ ipseis_app_name }}
+ipseis_backup_on_calendar: "*-*-* 03:00:00"
