@@ -6,11 +6,17 @@ Docker déployées par Ansible sur un serveur OVH unique (`main`, groupe
 
 ## Stacks déployées
 
-| Rôle       | Contenu                                     | URL                       |
-| ---------- | ------------------------------------------- | ------------------------- |
-| `keycloak` | Keycloak + PostgreSQL                       | `sso.<domaine>`           |
-| `komodo`   | Komodo Core + Periphery + MongoDB           | `komodo.<domaine>`        |
-| `heirloom` | API + app + site vitrine + PostgreSQL       | `heirloom*.<domaine>`     |
+| Rôle        | Contenu                               | URL                     |
+| ----------- | ------------------------------------- | ----------------------- |
+| `keycloak`  | Keycloak + PostgreSQL                 | `sso.<domaine>`         |
+| `komodo`    | Komodo Core + Periphery + MongoDB     | `komodo.<domaine>`      |
+| `heirloom`  | API + app + site vitrine + PostgreSQL | `heirloom*.<domaine>`   |
+| `portfolio` | Site personnel                        | apex `.com` et `.fr`    |
+| `ipseis`    | API + MongoDB, en prod et en dev      | `ipseis-backend*.<dom>` |
+
+`backup_mongo` est un rôle utilitaire, pas une stack : il installe un timer
+systemd qui dump une base Mongo et pousse l'archive dans restic. `ipseis`
+l'appelle pour sa base ; il est réutilisable tel quel pour Komodo.
 
 ## Prérequis
 
@@ -42,8 +48,30 @@ Cibler une partie du déploiement :
 
 ```bash
 ansible-playbook ansible/site.yml --tags system-apps    # keycloak + komodo
-ansible-playbook ansible/site.yml --tags personal-apps  # heirloom
+ansible-playbook ansible/site.yml --tags personal-apps  # heirloom + portfolio
+ansible-playbook ansible/site.yml --tags client-apps    # ipseis
+ansible-playbook ansible/site.yml --tags ipseis         # une seule stack
 ```
+
+## Sauvegardes Mongo
+
+Le rôle `backup_mongo` pose, par instance, un timer `backup-mongo-<nom>.timer`
+et deux scripts dans `/usr/local/bin`. Le dump tourne dans un conteneur jetable
+raccroché au réseau interne de la stack : la base n'a pas besoin d'être exposée
+sur l'hôte pour être sauvegardée.
+
+```bash
+systemctl list-timers 'backup-mongo-*'          # prochaine exécution
+journalctl -u backup-mongo-ipseis.service       # dernier dump
+restic snapshots --tag ipseis                   # ce qui est réellement stocké
+
+# Restauration — --drop écrase les collections existantes
+backup-mongo-restore-ipseis.sh latest --drop
+```
+
+Les identifiants restic et OVH S3 vivent dans `ansible/vaults/backups.yml`,
+séparés des secrets applicatifs parce qu'ils sont partagés entre toutes les
+bases sauvegardées.
 
 ## Dépendances hors repo
 
@@ -54,6 +82,9 @@ ne le fait pas. Sont supposés déjà en place sur l'hôte :
 - Traefik, avec l'entrypoint `websecure` et le certresolver `letsencrypt`
 - le réseau Docker `traefik-public` (déclaré `external: true` dans les stacks)
 - le durcissement système (firewall, SSH, mises à jour automatiques)
+
+Ces briques restent gérées par `portfolio-infra`, l'ancien dépôt : tant qu'elles
+n'ont pas été rapatriées ici, deux dépôts pilotent le même serveur.
 
 ## Secrets
 
