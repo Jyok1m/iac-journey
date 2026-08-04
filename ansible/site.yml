@@ -1,5 +1,28 @@
 ---
 # ------------------------------------------------------------------ #
+#                             Host Setup                             #
+# ------------------------------------------------------------------ #
+
+- name: Prepare the host
+  hosts: portfolio
+  roles:
+    - {role: hardening, tags: [hardening]}
+    - {role: vrack, tags: [vrack]}
+  tags: [setup]
+
+# ------------------------------------------------------------------ #
+#                                Edge                                #
+# ------------------------------------------------------------------ #
+# Traefik owns the traefik-public network that every stack below joins,
+# so it has to be up before any of them.
+
+- name: Install the edge proxy
+  hosts: portfolio
+  roles:
+    - {role: traefik, tags: [traefik]}
+  tags: [edge]
+
+# ------------------------------------------------------------------ #
 #                             System Apps                            #
 # ------------------------------------------------------------------ #
 
@@ -8,9 +31,12 @@
   vars_files:
     - vaults/keycloak.yml
     - vaults/komodo.yml
+    - vaults/monitoring.yml
   roles:
-    - { role: keycloak, tags: [keycloak] }
-    - { role: komodo, tags: [komodo] }
+    - {role: keycloak, tags: [keycloak]}
+    - {role: komodo, tags: [komodo]}
+    - {role: jenkins, tags: [jenkins]}
+    - {role: monitoring, tags: [monitoring]}
   tags: [system-apps]
 
 # ------------------------------------------------------------------ #
@@ -21,9 +47,11 @@
   hosts: portfolio
   vars_files:
     - vaults/heirloom.yml
+    - vaults/n8n.yml
   roles:
-    - { role: heirloom, tags: [heirloom] }
-    - { role: portfolio, tags: [portfolio] }
+    - {role: heirloom, tags: [heirloom]}
+    - {role: portfolio, tags: [portfolio]}
+    - {role: n8n, tags: [n8n]}
   tags: [personal-apps]
 
 # ------------------------------------------------------------------ #
@@ -36,5 +64,5 @@
     - vaults/ipseis.yml
     - vaults/backups.yml
   roles:
-    - { role: ipseis, tags: [ipseis] }
+    - {role: ipseis, tags: [ipseis]}
   tags: [client-apps]
