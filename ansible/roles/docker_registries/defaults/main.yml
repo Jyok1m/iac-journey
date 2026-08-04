@@ -14,14 +14,14 @@ docker_registries_dockerhub_username: "{{ docker_registries_vault_dockerhub_user
 docker_registries_dockerhub_password: "{{ docker_registries_vault_dockerhub_token }}"
 
 # ---------------------------- GitLab.com --------------------------- #
-docker_registries_gitlab_enabled: false
+docker_registries_gitlab_enabled: true
 docker_registries_gitlab_url: registry.gitlab.com
 docker_registries_gitlab_username: "{{ docker_registries_vault_gitlab_username }}"
 # Personal or deploy token carrying read_registry, plus write_registry to push.
 docker_registries_gitlab_password: "{{ docker_registries_vault_gitlab_token }}"
 
 # ------------------------ GitHub (ghcr.io) ------------------------- #
-docker_registries_github_enabled: false
+docker_registries_github_enabled: true
 docker_registries_github_url: ghcr.io
 docker_registries_github_username: "{{ docker_registries_vault_github_username }}"
 # Classic PAT with read:packages, plus write:packages to push.
