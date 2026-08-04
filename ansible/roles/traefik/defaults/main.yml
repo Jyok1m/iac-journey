@@ -1,0 +1,19 @@
+---
+# Default Role
+traefik_app_name: traefik
+traefik_app_dir: /opt/{{ traefik_app_name }}
+# acme.json lives outside the stack directory: certificates must survive a
+# `compose down -v` on the proxy.
+traefik_data_dir: /var/lib/{{ traefik_app_name }}
+
+# Service Traefik
+traefik_image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
+traefik_container_name: traefik
+traefik_acme_email: joachim.jasmin-dev@proton.me
+# Scraped by Prometheus over traefik-public.
+traefik_metrics_port: 8082
+
+# This role owns the traefik-public network. Every other stack declares it
+# `external: true` and only attaches to it, which is why traefik has to be
+# deployed before them.
+traefik_public_network: traefik-public

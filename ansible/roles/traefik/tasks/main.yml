@@ -1,0 +1,50 @@
+---
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ traefik_app_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Create data directory
+  ansible.builtin.file:
+    path: "{{ traefik_data_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+# Traefik refuses to start on a world-readable acme.json. state: touch with the
+# times preserved keeps the task idempotent instead of reporting a change on
+# every run.
+- name: Create the ACME store
+  ansible.builtin.file:
+    path: "{{ traefik_data_dir }}/acme.json"
+    state: touch
+    owner: root
+    group: root
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+
+- name: Deploy compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ traefik_app_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ traefik_app_dir }}"
+
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "{{ traefik_app_dir }}"
+    state: present
+    recreate: auto
+    remove_orphans: true
+    wait: true
+    wait_timeout: 300

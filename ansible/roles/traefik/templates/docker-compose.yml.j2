@@ -1,0 +1,59 @@
+---
+services:
+  traefik:
+    image: {{ traefik_image }}
+    container_name: {{ traefik_container_name }}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    command:
+      - "--api.dashboard=true"
+      # No dashboard router is declared, so the API stays unreachable from
+      # outside the container. Turning this on would publish it unauthenticated.
+      - "--api.insecure=false"
+      - "--ping=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network={{ traefik_public_network }}"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--certificatesresolvers.letsencrypt.acme.email={{ traefik_acme_email }}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.entryPoint=metrics"
+      - "--entrypoints.metrics.address=:{{ traefik_metrics_port }}"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Larger than the other stacks on purpose: this is the access log for every
+    # request reaching the host.
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    volumes:
+      # Read-only: Traefik only needs to watch container events, never to act
+      # on the daemon.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - "{{ traefik_data_dir }}/acme.json:/acme.json"
+    ports:
+      - 80:80/tcp
+      - 443:443/tcp
+    networks:
+      - traefik-public
+
+networks:
+  traefik-public:
+    name: {{ traefik_public_network }}
