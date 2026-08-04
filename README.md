@@ -103,18 +103,30 @@ bases sauvegardées.
 ## Registres Docker
 
 Le rôle `docker_registries` fait le `docker login` sur l'hôte. Trois registres,
-chacun optionnel et désactivé par défaut sauf Docker Hub :
+chacun activable indépendamment. Les trois sont actifs et cohabitent : Docker
+écrit une entrée par registre dans son fichier de config, elles ne s'écrasent
+pas.
 
-| Registre   | Variable d'activation                   | URL                          |
-| ---------- | --------------------------------------- | ---------------------------- |
-| Docker Hub | `docker_registries_dockerhub_enabled`   | `https://index.docker.io/v1/` |
-| GitLab.com | `docker_registries_gitlab_enabled`      | `registry.gitlab.com`        |
-| GitHub     | `docker_registries_github_enabled`      | `ghcr.io`                    |
+| Registre   | Variable d'activation                 | URL                           |
+| ---------- | ------------------------------------- | ----------------------------- |
+| Docker Hub | `docker_registries_dockerhub_enabled` | `https://index.docker.io/v1/` |
+| GitLab.com | `docker_registries_gitlab_enabled`    | `registry.gitlab.com`         |
+| GitHub     | `docker_registries_github_enabled`    | `ghcr.io`                      |
 
-Les identifiants vivent dans `ansible/vaults/registries.yml`. Ceux de GitLab et
-GitHub y sont présents mais vides : renseigne-les puis passe l'activation à
-`true`. Un registre activé sans identifiant fait échouer le play sur une
-assertion explicite, avant toute tentative de connexion.
+Les identifiants vivent dans `ansible/vaults/registries.yml`, à éditer avec
+`ansible-vault edit` (qui rechiffre à la sauvegarde). Un registre activé sans
+identifiant fait échouer le play sur une assertion qui le nomme, avant toute
+tentative de connexion — et comme le play `setup` passe en premier, cet échec
+arrête tout le reste du déploiement.
+
+Vérifier l'état réel sur l'hôte :
+
+```bash
+sudo jq '.auths | keys' /root/.docker/config.json
+```
+
+Attention au type de jeton : ghcr.io n'accepte que les PAT GitHub **classiques**,
+pas les fine-grained. Côté GitLab, un PAT ou un deploy token convient.
 
 Utilise des jetons, pas des mots de passe de compte : `docker login` écrit dans
 `/root/.docker/config.json`, où les identifiants sont encodés en base64 et non
