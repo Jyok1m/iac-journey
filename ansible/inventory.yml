@@ -11,7 +11,7 @@ all:
     ansible_become: true
     ansible_become_method: sudo
     ansible_deprecation_warnings: false
-    ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
     ansible_python_interpreter: /usr/bin/python3
     vrack_cidr: 24
     vrack_mtu: 1500

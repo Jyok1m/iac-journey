@@ -1,19 +1,26 @@
+---
+# ------------------------------------------------------------------ #
+#                             System Apps                            #
+# ------------------------------------------------------------------ #
+
 - name: Install system apps
   hosts: portfolio
   vars_files:
     - vaults/keycloak.yml
     - vaults/komodo.yml
   roles:
-    - keycloak
-    - komodo
-  tags:
-    - system-apps
+    - { role: keycloak, tags: [keycloak] }
+    - { role: komodo, tags: [komodo] }
+  tags: [system-apps]
+
+# ------------------------------------------------------------------ #
+#                            Personal Apps                           #
+# ------------------------------------------------------------------ #
 
 - name: Install personal apps
   hosts: portfolio
   vars_files:
     - vaults/heirloom.yml
   roles:
-    - heirloom
-  tags:
-    - personal-apps
+    - { role: heirloom, tags: [heirloom] }
+  tags: [personal-apps]
