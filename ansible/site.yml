@@ -6,10 +6,12 @@
   roles:
     - keycloak
     - komodo
-  tags: [system-apps]
+  tags:
+    - system-apps
 
 - name: Install personal apps
   hosts: portfolio
   roles:
     - heirloom
-  tags: [personal-apps]
+  tags:
+    - personal-apps
