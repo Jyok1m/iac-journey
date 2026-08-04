@@ -1,6 +1,6 @@
 ---
 services:
-  db:
+  ipseis-db:
     image: {{ ipseis_db_image }}
     container_name: {{ ipseis_db_container_name }}
     restart: unless-stopped
@@ -14,8 +14,8 @@ services:
           memory: 512M
     command: --wiredTigerCacheSizeGB {{ ipseis_db_cache_gb }}
     volumes:
-      - db_data:/data/db
-      - db_config:/data/configdb
+      - ipseis-db:/data/db
+      - ipseis-db-configdb:/data/configdb
     # Credentials are read from the container's own environment: keeping them
     # out of the compose file keeps them out of `docker inspect` output.
     healthcheck:
@@ -36,14 +36,14 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # `private` is internal, so a published port would never be reachable
-    # through it. `db-host` is the plain bridge that makes the loopback
+    # ipseis-internal is internal, so a published port would never be reachable
+    # through it. ipseis-db-host is the plain bridge that makes the loopback
     # binding above work — it is also the database's only route out.
     networks:
-      - private
-      - db-host
+      - ipseis-internal
+      - ipseis-db-host
 
-  api:
+  ipseis-api:
     image: {{ ipseis_api_image }}
     container_name: {{ ipseis_api_container_name }}
     restart: unless-stopped
@@ -61,7 +61,7 @@ services:
     volumes:
       - "{{ ipseis_app_dir }}/uploads:/app/public/uploads"
     depends_on:
-      db:
+      ipseis-db:
         condition: service_healthy
     logging:
       driver: json-file
@@ -69,7 +69,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - private
+      - ipseis-internal
       - traefik-public
     labels:
       - traefik.enable=true
@@ -90,7 +90,7 @@ services:
       - traefik.http.middlewares.{{ ipseis_api_container_name }}-redirect.redirectregex.permanent=true
 {% if ipseis_dev_enabled %}
 
-  db-dev:
+  ipseis-db-dev:
     image: {{ ipseis_db_image }}
     container_name: {{ ipseis_db_dev_container_name }}
     restart: unless-stopped
@@ -104,8 +104,8 @@ services:
           memory: 512M
     command: --wiredTigerCacheSizeGB {{ ipseis_db_cache_gb }}
     volumes:
-      - db_data_dev:/data/db
-      - db_config_dev:/data/configdb
+      - ipseis-db-dev:/data/db
+      - ipseis-db-configdb-dev:/data/configdb
     healthcheck:
       test:
         - CMD-SHELL
@@ -125,10 +125,10 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - private-dev
-      - db-host-dev
+      - ipseis-internal-dev
+      - ipseis-db-host-dev
 
-  api-dev:
+  ipseis-api-dev:
     image: {{ ipseis_api_dev_image }}
     container_name: {{ ipseis_api_dev_container_name }}
     restart: unless-stopped
@@ -146,7 +146,7 @@ services:
     volumes:
       - "{{ ipseis_app_dir }}/uploads-dev:/app/public/uploads"
     depends_on:
-      db-dev:
+      ipseis-db-dev:
         condition: service_healthy
     logging:
       driver: json-file
@@ -154,7 +154,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - private-dev
+      - ipseis-internal-dev
       - traefik-public
     labels:
       - traefik.enable=true
@@ -175,33 +175,36 @@ services:
       - traefik.http.middlewares.{{ ipseis_api_dev_container_name }}-redirect.redirectregex.permanent=true
 {% endif %}
 
+# Compose stamps every network and volume it creates with the key used to
+# declare it, then refuses to touch one whose stamp no longer matches. These
+# keys are therefore frozen on the names the running stack was built with —
+# shortening them to `private` or `db_data` would strand the live networks and
+# start the databases from empty volumes.
 networks:
-  private:
+  ipseis-internal:
     name: {{ ipseis_app_name }}-internal
     internal: true
-  db-host:
+  ipseis-db-host:
     name: {{ ipseis_app_name }}-db-host
   traefik-public:
     name: traefik-public
     external: true
 {% if ipseis_dev_enabled %}
-  private-dev:
+  ipseis-internal-dev:
     name: {{ ipseis_app_name }}-internal-dev
     internal: true
-  db-host-dev:
+  ipseis-db-host-dev:
     name: {{ ipseis_app_name }}-db-host-dev
 {% endif %}
 
 volumes:
-  db_data:
+  ipseis-db:
     name: {{ ipseis_db_container_name }}
-  db_config:
+  ipseis-db-configdb:
     name: {{ ipseis_db_container_name }}-configdb
 {% if ipseis_dev_enabled %}
-  db_data_dev:
+  ipseis-db-dev:
     name: {{ ipseis_db_dev_container_name }}
-  # Kept as -configdb-dev, not -dev-configdb: this is the name the existing
-  # volume already has, and renaming it would silently start from an empty one.
-  db_config_dev:
+  ipseis-db-configdb-dev:
     name: {{ ipseis_db_container_name }}-configdb-dev
 {% endif %}
