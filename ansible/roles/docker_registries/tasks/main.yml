@@ -37,6 +37,7 @@
     registry_url: "{{ item.registry_url }}"
     username: "{{ item.username }}"
     password: "{{ item.password }}"
+    config_path: "{{ docker_registries_config_path }}"
   loop: "{{ docker_registries_selected }}"
   loop_control:
     label: "{{ item.name }}"
@@ -46,7 +47,10 @@
 
 - name: Report the outcome for each registry
   ansible.builtin.debug:
-    msg: "{{ item.0.name }} ({{ item.0.registry_url }}) : {{ 'authenticated' if not item.1.failed else 'REFUSED' }}"
+    msg: >-
+      {{ item.0.name }} ({{ item.0.registry_url }}) :
+      {{ 'authenticated' if not item.1.failed else 'REFUSED' }}
+      -> {{ docker_registries_config_path }}
   loop: "{{ docker_registries_selected | zip(docker_registries_login.results) | list }}"
   loop_control:
     label: "{{ item.0.name }}"

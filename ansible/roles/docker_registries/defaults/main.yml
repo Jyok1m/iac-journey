@@ -31,3 +31,9 @@ docker_registries_github_password: "{{ docker_registries_vault_github_token }}"
 # out to the CLI, so the target host needs the Python HTTP stack.
 docker_registries_packages:
   - python3-requests
+
+# Pinned rather than left to the module's ~/.docker/config.json default, which
+# expands from HOME — and sudo commonly keeps HOME pointing at the login user,
+# so the credentials land in /home/<user>/.docker and root never sees them.
+# root's copy is the one that matters: the Jenkins image push runs as root.
+docker_registries_config_path: /root/.docker/config.json
