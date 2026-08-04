@@ -23,7 +23,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U {{ vault_db_user }} -d {{ vault_db }}"]
+      test: ["CMD-SHELL", "pg_isready -U {{ heirloom_vault_db_user }} -d {{ heirloom_vault_db }}"]
       interval: 5s
       timeout: 3s
       retries: 10
