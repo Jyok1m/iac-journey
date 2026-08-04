@@ -1,8 +1,8 @@
 ---
 services:
   mongo:
-    image: mongo:8.3.7@sha256:a7f5aa200005611166adcec0192c2f11d0acc3bfd9d5eb68e1a998a990412e41
-    container_name: {{ komodo_app_name }}-db
+    image: {{ komodo_mongo_image }}
+    container_name: {{ komodo_mongo_container_name }}
     restart: unless-stopped
     env_file: {{ komodo_env_file }}
     labels:
@@ -15,8 +15,8 @@ services:
       - internal
 
   core:
-    image: moghtech/komodo-core:2.3@sha256:768faad246f19f4c1ddfbb675346a7fe9a5010506d31ed4a21251199387004a2
-    container_name: {{ komodo_app_name }}-core
+    image: {{ komodo_core_image }}
+    container_name: {{ komodo_core_container_name }}
     init: true
     restart: unless-stopped
     depends_on:
@@ -26,20 +26,21 @@ services:
       KOMODO_DATABASE_ADDRESS: mongo:27017
     volumes:
       - keys:/config/keys
-      - ${COMPOSE_KOMODO_BACKUPS_PATH}:/backups
+      - {{ komodo_backups_path }}:/backups
     labels:
       - traefik.enable=true
-      - traefik.http.routers.komodo.rule=Host(`komodo.{{ portfolio_domain_com }}`)
-      - traefik.http.routers.komodo.entrypoints=websecure
-      - traefik.http.routers.komodo.tls.certresolver=letsencrypt
-      - traefik.http.services.komodo.loadbalancer.server.port=9120
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ komodo_app_name }}.rule={{ komodo_core_router }}
+      - traefik.http.routers.{{ komodo_app_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ komodo_app_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ komodo_app_name }}.loadbalancer.server.port=9120
     networks:
       - internal
       - traefik-public
 
   periphery:
-    image: moghtech/komodo-periphery:2.3@sha256:637bf3c03a84f04821c902eba12f63e527ea1f781a350489aa34f17f48f36e57
-    container_name: {{ komodo_app_name }}-periphery
+    image: {{ komodo_periphery_image }}
+    container_name: {{ komodo_periphery_container_name }}
     init: true
     restart: unless-stopped
     depends_on:
@@ -51,8 +52,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       ## Allow Periphery to see processes outside of container
       - /proc:/proc
-      ## Default: /etc/komodo.
-      - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
+      ## Same path inside and outside the container: Periphery hands compose
+      ## file paths to the host docker daemon.
+      - {{ komodo_periphery_root_dir }}:{{ komodo_periphery_root_dir }}
     networks:
       - internal
 

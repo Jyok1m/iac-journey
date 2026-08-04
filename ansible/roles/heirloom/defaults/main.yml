@@ -1,3 +1,45 @@
 ---
+# Default Role
 heirloom_app_name: heirloom
 heirloom_app_dir: /opt/{{ heirloom_app_name }}
+
+# Service Postgres
+heirloom_pg_image: postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+heirloom_pg_container_name: heirloom-db
+heirloom_pg_env_file: heirloom-db.env
+
+# Service Migrate (one-shot)
+heirloom_migrate_image: jyok1m/heirloom-api:migrate
+heirloom_migrate_container_name: heirloom-migrate
+
+# Service API
+heirloom_api_image: jyok1m/heirloom-api:main
+heirloom_api_container_name: heirloom-api
+heirloom_api_env_file: heirloom-api.env
+heirloom_api_router: Host(`heirloom-api.{{ portfolio_domain_com }}`) || Host(`heirloom-api.{{ portfolio_domain_fr }}`)
+
+# Service App
+heirloom_app_image: jyok1m/heirloom-app:main
+heirloom_app_container_name: heirloom-app
+heirloom_app_router: Host(`heirloom.{{ portfolio_domain_com }}`) || Host(`heirloom.{{ portfolio_domain_fr }}`)
+
+# Service Web (site vitrine)
+heirloom_web_image: jyok1m/heirloom-web:main
+heirloom_web_container_name: heirloom-web
+heirloom_web_env_file: heirloom-web.env
+heirloom_web_router: Host(`{{ heirloom_domain }}`)
+
+# URLs applicatives
+heirloom_api_url: https://heirloom-api.{{ portfolio_domain_com }}
+heirloom_frontend_url: https://heirloom.{{ portfolio_domain_com }}
+heirloom_public_url: https://{{ heirloom_domain }}
+heirloom_github_url: https://github.com/Jyok1m/heirloom
+heirloom_demo_url: https://heirloom.{{ portfolio_domain_com }}/view/2PRi8WGkxq5lV4qnCg2x6bPvl3I4OLzj
+
+# Media / IA
+heirloom_media_root: ./data/media
+heirloom_max_upload_mb: 100
+heirloom_ai_provider: openai
+heirloom_ai_model: gpt-5-mini
+heirloom_ai_base_url: ""
+heirloom_ai_reasoning_effort: low

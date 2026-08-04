@@ -7,6 +7,17 @@
     group: root
     mode: "0750"
 
+- name: Create Periphery directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - "{{ komodo_periphery_root_dir }}"
+    - "{{ komodo_backups_path }}"
+
 - name: Deploy env files
   ansible.builtin.template:
     src: "{{ item }}.j2"

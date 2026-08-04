@@ -1,108 +1,124 @@
-# Production stack — copy to the deploy host (e.g. /opt/heirloom/docker-compose.yml)
-# alongside a .env. The Jenkins pipeline drives it: `docker compose pull`,
-# `docker compose run --rm migrate`, `docker compose up -d api app`.
-#
-# Images come from Docker Hub (built by CI), so no build: context here.
-# DATABASE_URL is composed from POSTGRES_* and points at the `db` service
-# (the value in .env targets localhost for local dev — overridden below).
-
-x-db-url: &db-url
-  DATABASE_URL: postgresql://${POSTGRES_USER:-heirloom}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-heirloom}
-
+---
 services:
   db:
-    image: postgres:18.4-trixie
-    container_name: heirloom-db
+    image: {{ heirloom_pg_image }}
+    container_name: {{ heirloom_pg_container_name }}
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-heirloom}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: ${POSTGRES_DB:-heirloom}
+    env_file: {{ heirloom_pg_env_file }}
     volumes:
       - db_data:/var/lib/postgresql
-    networks: [private]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-heirloom}"]
+      test: ["CMD-SHELL", "pg_isready -U {{ vault_db_user }} -d {{ vault_db }}"]
       interval: 5s
       timeout: 3s
       retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - private
 
   # One-shot migrations. Not started by `up`; run explicitly before deploy:
   #   docker compose run --rm migrate
   migrate:
-    image: jyok1m/heirloom-api:migrate
+    image: {{ heirloom_migrate_image }}
+    container_name: {{ heirloom_migrate_container_name }}
     profiles: ["tools"]
-    container_name: heirloom-migrate
-    env_file: .env
-    environment:
-      <<: *db-url
+    restart: "no"
+    env_file: {{ heirloom_api_env_file }}
     depends_on:
       db:
         condition: service_healthy
-    networks: [private]
-    restart: "no"
+    networks:
+      - private
 
   api:
-    image: jyok1m/heirloom-api:main
-    container_name: heirloom-api
+    image: {{ heirloom_api_image }}
+    container_name: {{ heirloom_api_container_name }}
     restart: unless-stopped
-    env_file: .env
+    env_file: {{ heirloom_api_env_file }}
     environment:
-      <<: *db-url
       NODE_ENV: production
     volumes:
       - media:/prod/data/media
     depends_on:
       db:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - private
-      - heirloom
+      - app
       - traefik-public
     labels:
       - traefik.enable=true
-      - traefik.http.routers.heirloom-api.rule=Host(`heirloom-api.{{ portfolio_domain_com }}`) || Host(`heirloom-api.{{ portfolio_domain_fr }}`)
-      - traefik.http.routers.heirloom-api.entrypoints=websecure
-      - traefik.http.routers.heirloom-api.tls.certresolver=letsencrypt
-      - traefik.http.services.heirloom-api.loadbalancer.server.port=3000
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ heirloom_api_container_name }}.rule={{ heirloom_api_router }}
+      - traefik.http.routers.{{ heirloom_api_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ heirloom_api_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ heirloom_api_container_name }}.loadbalancer.server.port=3000
 
   app:
-    image: jyok1m/heirloom-app:main
-    container_name: heirloom-app
+    image: {{ heirloom_app_image }}
+    container_name: {{ heirloom_app_container_name }}
     restart: unless-stopped
     depends_on:
       - api
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
-      - heirloom
+      - app
       - traefik-public
     labels:
       - traefik.enable=true
-      - traefik.http.routers.heirloom.rule=Host(`heirloom.{{ portfolio_domain_com }}`) || Host(`heirloom.{{ portfolio_domain_fr }}`)
-      - traefik.http.routers.heirloom.entrypoints=websecure
-      - traefik.http.routers.heirloom.tls.certresolver=letsencrypt
-      - traefik.http.services.heirloom.loadbalancer.server.port=80
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ heirloom_app_name }}.rule={{ heirloom_app_router }}
+      - traefik.http.routers.{{ heirloom_app_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ heirloom_app_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ heirloom_app_name }}.loadbalancer.server.port=80
 
   web:
-    image: jyok1m/heirloom-web:main
+    image: {{ heirloom_web_image }}
+    container_name: {{ heirloom_web_container_name }}
     restart: unless-stopped
+    env_file: {{ heirloom_web_env_file }}
     depends_on:
       - app
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - traefik-public
     labels:
       - traefik.enable=true
-      - traefik.http.routers.heirloom-web.rule=Host(`{{ heirloom_domain }}`)
-      - traefik.http.routers.heirloom-web.entrypoints=websecure
-      - traefik.http.routers.heirloom-web.tls.certresolver=letsencrypt
-      - traefik.http.services.heirloom-web.loadbalancer.server.port=80
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ heirloom_web_container_name }}.rule={{ heirloom_web_router }}
+      - traefik.http.routers.{{ heirloom_web_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ heirloom_web_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ heirloom_web_container_name }}.loadbalancer.server.port=80
 
 networks:
   private:
-  heirloom:
+    name: heirloom_private
+    internal: true
+  app:
+    name: heirloom_app
   traefik-public:
     name: traefik-public
     external: true
 
 volumes:
   db_data:
+    name: heirloom_db_data
   media:
+    name: heirloom_media
