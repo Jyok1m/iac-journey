@@ -21,3 +21,7 @@ komodo_periphery_container_name: "{{ komodo_app_name }}-periphery"
 # Root directory used by the Periphery agent (stacks, repos, builds).
 # Also injected in the env file: the agent reads it at runtime.
 komodo_periphery_root_dir: /etc/komodo
+# Where the other roles render their stacks. Mounted into Periphery so a
+# Resource Sync can declare them with files_on_host and point run_directory at
+# the very files Ansible writes, instead of Komodo keeping a second copy.
+komodo_stacks_dir: /opt

@@ -86,6 +86,14 @@ services:
       ## Same path inside and outside the container: Periphery hands compose
       ## file paths to the host docker daemon.
       - {{ komodo_periphery_root_dir }}:{{ komodo_periphery_root_dir }}
+      ## Stacks rendered by Ansible under /opt. Mounted at the same path for
+      ## the same reason as above: Periphery reads the compose files, and the
+      ## host daemon has to resolve the very paths Periphery hands it.
+      ## Read-write because Komodo writes a project .env into the run directory
+      ## on deploy — but Ansible stays the source of truth, so treat the file
+      ## editor in the Komodo UI as a debugging tool, not a place to change
+      ## anything you want to survive the next playbook run.
+      - {{ komodo_stacks_dir }}:{{ komodo_stacks_dir }}
     logging:
       driver: json-file
       options:
