@@ -1,0 +1,48 @@
+---
+# ------------------------------ SSH ------------------------------ #
+# Taken from the connection variable on purpose: the port sshd listens on and
+# the port Ansible dials are the same fact, and storing it twice is how you end
+# up locked out after changing only one of them.
+hardening_ssh_port: "{{ vault_ansible_port }}"
+hardening_ssh_allowed_users:
+  - "{{ ansible_user }}"
+  # Jenkins deploys onto this host over SSH through the docker gateway.
+  - jenkins
+hardening_ssh_max_auth_tries: 5
+hardening_ssh_login_grace_time: 30
+hardening_ssh_client_alive_interval: 120
+hardening_ssh_client_alive_count_max: 2
+hardening_ssh_x11_forwarding: false
+hardening_ssh_tcp_forwarding: true
+# Debian cloud images ship 50-cloud-init.conf, which re-enables password
+# authentication and silently overrides the config rendered below.
+hardening_ssh_remove_cloud_init_dropin: true
+
+# ---------------------------- Firewall ---------------------------- #
+hardening_ufw_default_incoming: deny
+hardening_ufw_default_outgoing: allow
+hardening_ufw_logging: low
+hardening_ufw_allowed_ports:
+  - {port: "{{ vault_ansible_port }}", proto: tcp, comment: SSH}
+  - {port: "80", proto: tcp, comment: HTTP}
+  - {port: "443", proto: tcp, comment: HTTPS}
+  # Mail ports, opened for a Mailcow instance that this repo does not manage.
+  # They stay listed so a run cannot silently close a working mail server.
+  - {port: "25", proto: tcp, comment: Postfix SMTP (postfix-mailcow)}
+  - {port: "465", proto: tcp, comment: Postfix SMTPS (postfix-mailcow)}
+  - {port: "587", proto: tcp, comment: Postfix Submission (postfix-mailcow)}
+  - {port: "143", proto: tcp, comment: Dovecot IMAP (dovecot-mailcow)}
+  - {port: "993", proto: tcp, comment: Dovecot IMAPS (dovecot-mailcow)}
+  - {port: "110", proto: tcp, comment: Dovecot POP3 (dovecot-mailcow)}
+  - {port: "995", proto: tcp, comment: Dovecot POP3S (dovecot-mailcow)}
+  - {port: "4190", proto: tcp, comment: Dovecot Managesieve (dovecot-mailcow)}
+hardening_ufw_allowed_sources:
+  - {src: "{{ vrack_subnet }}", comment: vRack intra-cluster}
+
+# ---------------------------- fail2ban ---------------------------- #
+hardening_fail2ban_max_retry: 5
+hardening_fail2ban_ban_time: 3600
+hardening_fail2ban_find_time: 600
+# Bans are installed as ufw rules, so fail2ban and the firewall agree.
+hardening_fail2ban_ban_action: ufw
+hardening_fail2ban_ssh_enabled: true

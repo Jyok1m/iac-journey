@@ -1,0 +1,9 @@
+---
+- name: Harden the SSH daemon
+  ansible.builtin.import_tasks: ssh.yml
+
+- name: Configure the firewall
+  ansible.builtin.import_tasks: firewall.yml
+
+- name: Configure fail2ban
+  ansible.builtin.import_tasks: fail2ban.yml

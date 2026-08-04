@@ -1,0 +1,47 @@
+---
+- name: Install ufw
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# Order matters: every allow rule is in place before the default policy flips
+# to deny and before ufw is enabled, so the SSH session running this play is
+# never the one that gets dropped.
+- name: Allow the configured ports
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ hardening_ufw_allowed_ports }}"
+  loop_control:
+    label: "{{ item.port }}/{{ item.proto }}"
+
+- name: Allow the trusted source networks
+  community.general.ufw:
+    rule: allow
+    src: "{{ item.src }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ hardening_ufw_allowed_sources }}"
+  loop_control:
+    label: "{{ item.src }}"
+
+- name: Set the default ingress policy
+  community.general.ufw:
+    default: "{{ hardening_ufw_default_incoming }}"
+    direction: incoming
+
+- name: Set the default egress policy
+  community.general.ufw:
+    default: "{{ hardening_ufw_default_outgoing }}"
+    direction: outgoing
+
+- name: Configure ufw logging
+  community.general.ufw:
+    logging: "{{ hardening_ufw_logging }}"
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled
