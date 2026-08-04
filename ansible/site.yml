@@ -23,4 +23,18 @@
     - vaults/heirloom.yml
   roles:
     - { role: heirloom, tags: [heirloom] }
+    - { role: portfolio, tags: [portfolio] }
   tags: [personal-apps]
+
+# ------------------------------------------------------------------ #
+#                             Client Apps                            #
+# ------------------------------------------------------------------ #
+
+- name: Install client apps
+  hosts: portfolio
+  vars_files:
+    - vaults/ipseis.yml
+    - vaults/backups.yml
+  roles:
+    - { role: ipseis, tags: [ipseis] }
+  tags: [client-apps]
