@@ -1,0 +1,120 @@
+---
+services:
+  jenkins-dind:
+    image: {{ jenkins_dind_image }}
+    container_name: {{ jenkins_dind_container_name }}
+    restart: unless-stopped
+    # Required to run a Docker daemon inside a container. This grants the
+    # container full control of the host kernel: anything that can reach the
+    # dind socket effectively has root here.
+    privileged: true
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: --storage-driver overlay2
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - jenkins:/var/jenkins_home
+      - jenkins-docker-certs:/certs/client
+      - jenkins-dind-data:/var/lib/docker
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      jenkins-internal:
+        # The GUI reaches the daemon at tcp://docker:2376.
+        aliases:
+          - docker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  jenkins-gui:
+    image: {{ jenkins_image }}
+    container_name: {{ jenkins_gui_container_name }}
+    restart: unless-stopped
+    depends_on:
+      jenkins-dind:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          memory: 512M
+    environment:
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_CERT_PATH: /certs/client
+      DOCKER_TLS_VERIFY: 1
+      JENKINS_OPTS: --httpPort=8080
+      JENKINS_URL: https://{{ jenkins_host }}/
+      JAVA_OPTS: -Djenkins.model.Jenkins.crumbIssuerProxyCompatibility=true -Dhudson.security.csrf.DefaultCrumbIssuer.EXCLUDE_SESSION_ID=true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/login >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      # Jenkins takes its time on a cold start; failing before it has finished
+      # loading plugins would just churn the container.
+      start_period: 180s
+    volumes:
+      - jenkins:/var/jenkins_home
+      - jenkins-docker-certs:/certs/client:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - jenkins-internal
+      - traefik-public
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      # Canonical host
+      - traefik.http.routers.jenkins.rule=Host(`{{ jenkins_host }}`)
+      - traefik.http.routers.jenkins.entrypoints=websecure
+      - traefik.http.routers.jenkins.tls.certresolver=letsencrypt
+      - traefik.http.services.jenkins.loadbalancer.server.port=8080
+      # Permanent redirect from the .fr to the canonical .com
+      - traefik.http.routers.jenkins-redirect.rule=Host(`{{ jenkins_redirect_host }}`)
+      - traefik.http.routers.jenkins-redirect.entrypoints=websecure
+      - traefik.http.routers.jenkins-redirect.tls.certresolver=letsencrypt
+      - traefik.http.routers.jenkins-redirect.service=jenkins
+      - traefik.http.routers.jenkins-redirect.middlewares=jenkins-redirect
+      - traefik.http.middlewares.jenkins-redirect.redirectregex.regex=^https?://{{ jenkins_redirect_host | replace('.', '\\.') }}/(.*)
+      - traefik.http.middlewares.jenkins-redirect.redirectregex.replacement=https://{{ jenkins_host }}/$${1}
+      - traefik.http.middlewares.jenkins-redirect.redirectregex.permanent=true
+
+# Keys frozen on what the running stack was built with: Compose refuses to
+# adopt a network or volume whose com.docker.compose.* label no longer matches.
+volumes:
+  jenkins:
+    name: jenkins
+  jenkins-docker-certs:
+    name: jenkins-docker-certs
+  jenkins-dind-data:
+    name: jenkins-dind-data
+
+networks:
+  # Not internal: builds pull dependencies from the internet.
+  jenkins-internal:
+    name: jenkins-internal
+  traefik-public:
+    name: traefik-public
+    external: true

@@ -1,0 +1,36 @@
+---
+# Default Role
+jenkins_app_name: jenkins
+jenkins_app_dir: /opt/{{ jenkins_app_name }}
+
+# Image built on the host from the Dockerfile in this role, then pushed so the
+# tag is reproducible off-box. Pushing needs the host to be logged in to the
+# registry; set to false if it is not.
+jenkins_image_name: jyok1m/jenkins
+jenkins_image_tag: v1.0
+jenkins_image: "{{ jenkins_image_name }}:{{ jenkins_image_tag }}"
+jenkins_image_push: true
+jenkins_base_image: jenkins/jenkins:2.541.1-jdk21@sha256:d1ea795c6facd7f549a21c40e5e43ffcc5fbc5f48683d9b24750f26e8079d772
+jenkins_plugins:
+  - blueocean
+  - docker-workflow
+  - json-path-api
+
+# Service Docker-in-Docker — the build daemon Jenkins pipelines talk to.
+# Pinned to a version rather than the floating `dind` tag: a silent engine
+# upgrade under a CI runner is how builds start failing for no visible reason.
+jenkins_dind_image: docker:29.7.1-dind@sha256:e8faad5a8dc5279dff929afc5449f2791736912fff9f99351d742db2fad01b4c
+jenkins_dind_container_name: jenkins-dind
+
+# Service Jenkins
+jenkins_gui_container_name: jenkins-gui
+
+# Routing — the canonical host is the .com, the .fr permanently redirects to it.
+jenkins_host: jenkins.{{ portfolio_domain_com }}
+jenkins_redirect_host: jenkins.{{ portfolio_domain_fr }}
+
+# Host account Jenkins deploys through, over SSH via the docker gateway.
+jenkins_host_user: jenkins
+# Repository hosts whose key is pre-seeded in the container's known_hosts.
+jenkins_known_hosts:
+  - github.com

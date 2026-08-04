@@ -1,0 +1,59 @@
+---
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ jenkins_app_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Deploy the Jenkins Dockerfile
+  ansible.builtin.template:
+    src: Dockerfile.j2
+    dest: "{{ jenkins_app_dir }}/Dockerfile"
+    owner: root
+    group: root
+    mode: "0644"
+
+# rebuild: never means the image is only built when that tag is missing, so a
+# routine run does not spend minutes reinstalling plugins. Bump
+# jenkins_image_tag to force a new build.
+- name: Build the Jenkins image
+  community.docker.docker_image_build:
+    name: "{{ jenkins_image_name }}"
+    tag: "{{ jenkins_image_tag }}"
+    path: "{{ jenkins_app_dir }}"
+    dockerfile: Dockerfile
+    pull: true
+    rebuild: never
+
+- name: Push the Jenkins image
+  community.docker.docker_image_push:
+    name: "{{ jenkins_image_name }}"
+    tag: "{{ jenkins_image_tag }}"
+  when: jenkins_image_push
+
+- name: Deploy compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ jenkins_app_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+
+# Only the dind image is pulled here; the GUI image was just built locally.
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ jenkins_app_dir }}"
+
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "{{ jenkins_app_dir }}"
+    state: present
+    recreate: auto
+    remove_orphans: true
+    wait: true
+    wait_timeout: 600
+
+- name: Bootstrap the Jenkins deploy credentials
+  ansible.builtin.import_tasks: bootstrap.yml
