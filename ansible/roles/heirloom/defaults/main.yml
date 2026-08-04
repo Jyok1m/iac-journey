@@ -15,6 +15,9 @@ heirloom_migrate_container_name: heirloom-migrate
 # Service API
 heirloom_api_image: jyok1m/heirloom-api:main
 heirloom_api_container_name: heirloom-api
+# Uploads are buffered in the Node process (MAX_UPLOAD_MB), hence the headroom.
+heirloom_api_memory: 768M
+heirloom_api_heap_mb: 512
 heirloom_api_env_file: heirloom-api.env
 heirloom_api_router: Host(`heirloom-api.{{ portfolio_domain_com }}`) || Host(`heirloom-api.{{ portfolio_domain_fr }}`)
 

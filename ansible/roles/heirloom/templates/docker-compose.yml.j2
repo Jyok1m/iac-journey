@@ -5,6 +5,21 @@ services:
     container_name: {{ heirloom_pg_container_name }}
     restart: unless-stopped
     env_file: {{ heirloom_pg_env_file }}
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 512M
+        reservations:
+          memory: 256M
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - max_connections=50
     volumes:
       - db_data:/var/lib/postgresql
     healthcheck:
@@ -28,6 +43,11 @@ services:
     profiles: ["tools"]
     restart: "no"
     env_file: {{ heirloom_api_env_file }}
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 512M
     depends_on:
       db:
         condition: service_healthy
@@ -41,6 +61,16 @@ services:
     env_file: {{ heirloom_api_env_file }}
     environment:
       NODE_ENV: production
+      # Heap capped below the cgroup limit: V8 must OOM-kill itself with a JS
+      # stack trace rather than get SIGKILLed by the kernel.
+      NODE_OPTIONS: --max-old-space-size={{ heirloom_api_heap_mb }}
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: {{ heirloom_api_memory }}
+        reservations:
+          memory: 256M
     volumes:
       - media:/prod/data/media
     depends_on:
@@ -67,6 +97,13 @@ services:
     image: {{ heirloom_app_image }}
     container_name: {{ heirloom_app_container_name }}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          memory: 32M
     depends_on:
       - api
     logging:
@@ -90,6 +127,13 @@ services:
     container_name: {{ heirloom_web_container_name }}
     restart: unless-stopped
     env_file: {{ heirloom_web_env_file }}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          memory: 32M
     depends_on:
       - app
     logging:
