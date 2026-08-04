@@ -27,6 +27,11 @@
 
 # Writes /root/.docker/config.json, which is what `docker push` and the Jenkins
 # image push read. Credentials are stored base64-encoded, not encrypted.
+#
+# no_log is mandatory here: a failure would otherwise echo the module arguments
+# back, token included. It also swallows which registry refused, so the login
+# is allowed to fail and is reported by name below instead of aborting the loop
+# on the first rejection and hiding the rest.
 - name: Log in to the registries
   community.docker.docker_login:
     registry_url: "{{ item.registry_url }}"
@@ -36,9 +41,21 @@
   loop_control:
     label: "{{ item.name }}"
   no_log: true
+  register: docker_registries_login
+  failed_when: false
 
-- name: Report which registries are authenticated
+- name: Report the outcome for each registry
   ansible.builtin.debug:
+    msg: "{{ item.0.name }} ({{ item.0.registry_url }}) : {{ 'authenticated' if not item.1.failed else 'REFUSED' }}"
+  loop: "{{ docker_registries_selected | zip(docker_registries_login.results) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+
+- name: Fail if any registry refused the credentials
+  ansible.builtin.fail:
     msg: >-
-      Logged in to: {{ docker_registries_selected | map(attribute='name') | join(', ')
-      if docker_registries_selected | length > 0 else 'none (every registry is disabled)' }}
+      Authentication refused by:
+      {{ docker_registries_selected | zip(docker_registries_login.results)
+         | selectattr('1.failed') | map(attribute='0.name') | join(', ') }}.
+      Check the token and its scopes in ansible/vaults/registries.yml.
+  when: docker_registries_login.results | selectattr('failed') | list | length > 0
