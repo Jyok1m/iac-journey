@@ -1,0 +1,49 @@
+---
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ monitoring_app_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Deploy compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ monitoring_app_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+
+# Mounted read-only into the container. Prometheus is started with
+# --web.enable-lifecycle, so a config change can be reloaded without a restart.
+- name: Deploy the Prometheus configuration
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ monitoring_app_dir }}/prometheus.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy the Grafana provisioning tree
+  ansible.builtin.copy:
+    src: grafana/
+    dest: "{{ monitoring_app_dir }}/grafana/"
+    owner: root
+    group: root
+    mode: "0644"
+    directory_mode: "0755"
+  when: monitoring_is_hub
+
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ monitoring_app_dir }}"
+
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "{{ monitoring_app_dir }}"
+    state: present
+    recreate: auto
+    remove_orphans: true
+    wait: true
+    wait_timeout: 300

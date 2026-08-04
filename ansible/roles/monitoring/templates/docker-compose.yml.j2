@@ -1,0 +1,205 @@
+---
+services:
+  prometheus:
+    image: {{ monitoring_prometheus_image }}
+    container_name: {{ monitoring_prometheus_container_name }}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+      - --storage.tsdb.retention.time={{ monitoring_prometheus_retention }}
+      - --web.enable-lifecycle
+{% if monitoring_is_hub %}
+      - --web.external-url=https://{{ monitoring_prometheus_host }}
+{% endif %}
+    volumes:
+      - prometheus:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+{% if not monitoring_is_hub %}
+    # A leaf publishes /federate on the vRack address only, for the hub to scrape.
+    ports:
+      - "{{ vrack_ip }}:{{ monitoring_federation_port }}:9090"
+{% endif %}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - monitoring-internal
+{% if monitoring_is_edge %}
+      - traefik-public
+{% endif %}
+{% if monitoring_is_hub %}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      # Canonical host, behind basic auth
+      - traefik.http.routers.prom.rule=Host(`{{ monitoring_prometheus_host }}`)
+      - traefik.http.routers.prom.entrypoints=websecure
+      - traefik.http.routers.prom.tls.certresolver=letsencrypt
+      - traefik.http.routers.prom.service=prom
+      - traefik.http.routers.prom.middlewares=prom-auth
+      - traefik.http.services.prom.loadbalancer.server.port=9090
+      # Permanent redirect from the .fr to the canonical .com
+      - traefik.http.routers.prom-fr.rule=Host(`{{ monitoring_prometheus_redirect_host }}`)
+      - traefik.http.routers.prom-fr.entrypoints=websecure
+      - traefik.http.routers.prom-fr.tls.certresolver=letsencrypt
+      - traefik.http.routers.prom-fr.service=prom
+      - traefik.http.routers.prom-fr.middlewares=prom-redirect
+      - traefik.http.middlewares.prom-redirect.redirectregex.regex=^https?://{{ monitoring_prometheus_redirect_host | replace('.', '\\.') }}/(.*)
+      - traefik.http.middlewares.prom-redirect.redirectregex.replacement=https://{{ monitoring_prometheus_host }}/$${1}
+      - traefik.http.middlewares.prom-redirect.redirectregex.permanent=true
+      # Generated with `htpasswd -nbB admin '<password>'`. The bcrypt hash is
+      # full of $, which Compose would read as interpolation, hence the doubling.
+      - traefik.http.middlewares.prom-auth.basicauth.users={{ monitoring_vault_prometheus_basic_auth | replace('$', '$$') }}
+{% endif %}
+{% if monitoring_is_hub %}
+
+  grafana:
+    image: {{ monitoring_grafana_image }}
+    container_name: {{ monitoring_grafana_container_name }}
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    environment:
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: https://{{ monitoring_grafana_host }}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_METRICS_ENABLED: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - grafana:/var/lib/grafana
+      - "{{ monitoring_app_dir }}/grafana/provisioning:/etc/grafana/provisioning:ro"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - monitoring-internal
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      # Canonical host
+      - traefik.http.routers.grafana.rule=Host(`{{ monitoring_grafana_host }}`)
+      - traefik.http.routers.grafana.entrypoints=websecure
+      - traefik.http.routers.grafana.tls.certresolver=letsencrypt
+      - traefik.http.routers.grafana.service=grafana
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+      # Permanent redirect from the .fr to the canonical .com
+      - traefik.http.routers.grafana-fr.rule=Host(`{{ monitoring_grafana_redirect_host }}`)
+      - traefik.http.routers.grafana-fr.entrypoints=websecure
+      - traefik.http.routers.grafana-fr.tls.certresolver=letsencrypt
+      - traefik.http.routers.grafana-fr.service=grafana
+      - traefik.http.routers.grafana-fr.middlewares=grafana-redirect
+      - traefik.http.middlewares.grafana-redirect.redirectregex.regex=^https?://{{ monitoring_grafana_redirect_host | replace('.', '\\.') }}/(.*)
+      - traefik.http.middlewares.grafana-redirect.redirectregex.replacement=https://{{ monitoring_grafana_host }}/$${1}
+      - traefik.http.middlewares.grafana-redirect.redirectregex.permanent=true
+{% endif %}
+
+  node-exporter:
+    image: {{ monitoring_node_exporter_image }}
+    container_name: {{ monitoring_node_exporter_container_name }}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          memory: 32M
+    command:
+      - --path.procfs=/host/proc
+      - --path.rootfs=/rootfs
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - monitoring-internal
+
+  cadvisor:
+    image: {{ monitoring_cadvisor_image }}
+    container_name: {{ monitoring_cadvisor_container_name }}
+    restart: unless-stopped
+    # cAdvisor reads cgroup and device state straight from the host; it cannot
+    # do that unprivileged. The blast radius of this container is the machine.
+    privileged: true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          memory: 64M
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - monitoring-internal
+
+# Keys frozen on what the running stack was built with: Compose refuses to
+# adopt a network or volume whose com.docker.compose.* label no longer matches.
+volumes:
+  prometheus:
+    name: prometheus
+{% if monitoring_is_hub %}
+  grafana:
+    name: grafana
+{% endif %}
+
+networks:
+  monitoring-internal:
+    name: monitoring-internal
+{% if monitoring_is_edge %}
+  traefik-public:
+    name: traefik-public
+    external: true
+{% endif %}
