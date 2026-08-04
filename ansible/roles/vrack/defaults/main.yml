@@ -1,0 +1,12 @@
+---
+# Required, both defined in host_vars: the interface facing the vRack and the
+# address this host carries on it.
+vrack_iface: ""
+vrack_ip: ""
+vrack_cidr: 24
+vrack_mtu: 1500
+
+vrack_netplan_file: /etc/netplan/60-vrack.yaml
+# How long to wait for the interface to come up before failing the play.
+vrack_verify_retries: 10
+vrack_verify_delay: 2

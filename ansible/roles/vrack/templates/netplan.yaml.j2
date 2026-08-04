@@ -1,0 +1,11 @@
+# Ansible managed — do not edit manually
+network:
+  version: 2
+  ethernets:
+    {{ vrack_iface }}:
+      dhcp4: false
+      dhcp6: false
+      accept-ra: false
+      addresses:
+        - {{ vrack_ip }}/{{ vrack_cidr }}
+      mtu: {{ vrack_mtu }}
