@@ -1,0 +1,60 @@
+---
+- name: Install the apt prerequisites
+  ansible.builtin.apt:
+    name: "{{ docker_prerequisites }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the keyring directory
+  ansible.builtin.file:
+    path: "{{ docker_keyring_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download the Docker signing key
+  ansible.builtin.get_url:
+    url: "{{ docker_signing_key_url }}"
+    dest: "{{ docker_keyring_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# dpkg's name for the architecture is not the kernel's: amd64, not x86_64. The
+# apt source needs dpkg's, so ask dpkg rather than deriving it from facts.
+- name: Read the dpkg architecture
+  ansible.builtin.command: dpkg --print-architecture
+  register: docker_dpkg_arch
+  changed_when: false
+  check_mode: false
+
+- name: Render the Docker apt source
+  ansible.builtin.template:
+    src: docker.sources.j2
+    dest: "{{ docker_sources_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    docker_dpkg_architecture: "{{ docker_dpkg_arch.stdout }}"
+
+- name: Install the Docker engine and the Compose plugin
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: true
+
+- name: Enable and start Docker
+  ansible.builtin.service:
+    name: docker
+    state: "{{ docker_service_state }}"
+    enabled: "{{ docker_service_enabled }}"
+
+- name: Add the configured users to the docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"

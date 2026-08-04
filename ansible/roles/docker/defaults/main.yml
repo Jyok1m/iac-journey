@@ -1,0 +1,31 @@
+---
+# Pulled in before the Docker apt repository can be added.
+docker_prerequisites:
+  - ca-certificates
+  - curl
+
+# Signing key and repository. deb822 format, so the key is referenced by path
+# instead of being dropped into the deprecated trusted.gpg.d.
+docker_keyring_path: /etc/apt/keyrings/docker.asc
+docker_signing_key_url: https://download.docker.com/linux/debian/gpg
+docker_repo_url: https://download.docker.com/linux/debian
+docker_repo_components: stable
+docker_sources_path: /etc/apt/sources.list.d/docker.sources
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  # Compose v2 as a CLI plugin — this is what community.docker.docker_compose_v2
+  # shells out to, so every stack role depends on it being here.
+  - docker-compose-plugin
+
+docker_service_state: started
+docker_service_enabled: true
+
+# Accounts added to the docker group. Membership only takes effect on their
+# next login, which is why Ansible itself keeps using become rather than
+# relying on it.
+docker_users:
+  - "{{ ansible_user }}"
