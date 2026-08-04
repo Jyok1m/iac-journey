@@ -33,9 +33,21 @@
     project_src: "{{ heirloom_app_dir }}"
   register: heirloom_docker_compose_pull
 
+# The database must be converged before the migration runs: `compose run` only
+# manages the dependencies of `migrate`, so it cannot reconcile a drifted
+# network while the other services still hold endpoints on it.
+- name: Deploy database
+  community.docker.docker_compose_v2:
+    project_src: "{{ heirloom_app_dir }}"
+    services:
+      - db
+    state: present
+    wait: true
+    wait_timeout: 120
+
 - name: Run migrations
   ansible.builtin.command:
-    cmd: docker compose --project-directory {{ heirloom_app_dir }} run --rm migrate
+    cmd: docker compose --project-directory {{ heirloom_app_dir }} run --rm --no-deps migrate
   register: heirloom_migrate
   changed_when: true
 
