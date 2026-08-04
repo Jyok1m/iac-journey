@@ -4,12 +4,9 @@ all:
     portfolio:
       hosts:
         main:
-          # Vault
-          ansible_user: "{{ ansible_user }}"
-          ansible_ssh_private_key_file: "{{ ansible_ssh_private_key_file }}"
           # Vars
-          ansible_host: "{{ ansible_host }}"
-          ansible_port: "{{ ansible_port }}"
+          ansible_host: "{{ vault_ansible_host }}"
+          ansible_port: "{{ vault_ansible_port }}"
   vars:
     ansible_become: true
     ansible_become_method: sudo
