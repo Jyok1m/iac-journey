@@ -1,0 +1,130 @@
+---
+# Everything here is a question that, answered wrong, makes the rest of the
+# role pointless. Each one fails with the action that fixes it rather than
+# with a stack trace three tasks later.
+
+- name: Assert the vault is unlocked and complete
+  ansible.builtin.assert:
+    that:
+      - mailcow_vault_dbpass | default('') | length > 0
+      - mailcow_vault_dbroot | default('') | length > 0
+      - mailcow_vault_redispass | default('') | length > 0
+      - mailcow_vault_sogo_key | default('') | length == 16
+      - mailcow_vault_api_key | default('') | length > 0
+      - mailcow_vault_mailboxes | default({}) | length > 0
+    fail_msg: >-
+      ansible/vaults/mailcow.yml is missing or incomplete. It must define
+      mailcow_vault_dbpass, mailcow_vault_dbroot, mailcow_vault_redispass,
+      mailcow_vault_sogo_key (exactly 16 characters — SOGo derives its URL
+      cipher from it and a different length breaks webmail links),
+      mailcow_vault_api_key and mailcow_vault_mailboxes.
+    quiet: true
+
+# mailcow's API key charset is enforced by a regex in sessions.inc.php; a key
+# containing anything else is silently truncated at lookup and every API call
+# in this role returns 401 with no explanation.
+- name: Assert the API key uses the charset mailcow accepts
+  ansible.builtin.assert:
+    that:
+      - mailcow_vault_api_key is match('^[A-Za-z0-9-]+$')
+    fail_msg: >-
+      mailcow_vault_api_key may only contain a-z, A-Z, 0-9 and '-'.
+      mailcow strips every other character before looking the key up, so a
+      key with other characters authenticates as nothing.
+    quiet: true
+
+- name: Collect the container engine state
+  ansible.builtin.command:
+    cmd: docker info --format {{ '{{.Swarm.LocalNodeState}}' }}
+  register: mailcow_swarm_state
+  changed_when: false
+
+# Upstream is explicit that Swarm is unsupported. Better to stop here than to
+# debug an overlay network three hours in.
+- name: Assert Docker is not in Swarm mode
+  ansible.builtin.assert:
+    that:
+      - mailcow_swarm_state.stdout | trim == 'inactive'
+    fail_msg: >-
+      Docker reports Swarm state '{{ mailcow_swarm_state.stdout | trim }}'.
+      mailcow-dockerized is not supported on Swarm. Leave the swarm before
+      running this role.
+    quiet: true
+
+- name: Check whether outbound SMTP is reachable
+  ansible.builtin.command:
+    cmd: >-
+      timeout 10 python3 -c
+      "import socket,sys; s=socket.create_connection(('gmail-smtp-in.l.google.com',25),8);
+      sys.stdout.write(s.recv(64).decode(errors='replace')); s.close()"
+  register: mailcow_port25
+  changed_when: false
+  failed_when: false
+  when: mailcow_require_port25_egress
+
+# OVH blocks outbound 25 on some accounts and only lifts it on request. A
+# mail server that cannot open 25 outbound delivers nothing, and the failure
+# looks like a queue that never drains.
+- name: Assert outbound port 25 is open
+  ansible.builtin.assert:
+    that:
+      - mailcow_port25.rc == 0
+      - "'220' in mailcow_port25.stdout"
+    fail_msg: >-
+      No SMTP banner from gmail-smtp-in.l.google.com:25. OVH blocks outbound
+      port 25 by default on some accounts. Open a request in the OVH manager
+      to have it unblocked, then re-run. Set mailcow_require_port25_egress
+      to false to build anyway, knowing outbound mail will not deliver.
+    quiet: true
+  when: mailcow_require_port25_egress
+
+- name: Read the docker networks
+  community.docker.docker_host_info:
+    networks: true
+    networks_filters:
+      name: "{{ mailcow_traefik_network }}"
+  register: mailcow_networks
+
+# Traefik owns this network and has to exist first; mailcow attaches to it as
+# external and compose refuses to create it implicitly.
+- name: Assert the Traefik network exists
+  ansible.builtin.assert:
+    that:
+      - mailcow_networks.networks | length > 0
+    fail_msg: >-
+      Docker network '{{ mailcow_traefik_network }}' does not exist. Run the
+      traefik role before this one.
+    quiet: true
+
+- name: Look for an existing mailcow deployment
+  ansible.builtin.stat:
+    path: "{{ mailcow_app_dir }}/docker-compose.yml"
+  register: mailcow_existing_compose
+
+# On a re-run mailcow itself holds the mail ports, so the free-port assertion
+# below only applies to a first install.
+- name: Record whether this is a first install
+  ansible.builtin.set_fact:
+    mailcow_already_deployed: "{{ mailcow_existing_compose.stat.exists }}"
+
+- name: Look for anything already bound to the mail ports
+  ansible.builtin.command:
+    cmd: ss -tlnH
+  register: mailcow_listeners
+  changed_when: false
+  when: not mailcow_already_deployed
+
+# A port already held by an unrelated stack turns compose up into a partial
+# failure that leaves half the containers running.
+- name: Assert the mail ports are free
+  ansible.builtin.assert:
+    that:
+      - mailcow_listeners.stdout is not search(':' ~ item ~ '\s')
+    fail_msg: >-
+      Port {{ item }} is already bound on this host. mailcow needs it.
+      Identify the holder with `ss -tlnp | grep :{{ item }}` before re-running.
+    quiet: true
+  loop: "{{ mailcow_ports.values() | list }}"
+  loop_control:
+    label: "{{ item }}"
+  when: not mailcow_already_deployed

@@ -1,0 +1,71 @@
+---
+# Traefik only requests a certificate for a host once a router exists for it,
+# and the router only exists once the stack is up — which is why this runs
+# after deploy rather than before.
+
+- name: Enable the certificate sync path unit
+  ansible.builtin.systemd_service:
+    name: "{{ mailcow_cert_sync_unit }}.path"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for Traefik to obtain a certificate for the mail host
+  ansible.builtin.command:
+    argv:
+      - jq
+      - -e
+      - --arg
+      - d
+      - "{{ mailcow_hostname }}"
+      - --arg
+      - r
+      - "{{ mailcow_traefik_acme_resolver }}"
+      - '[.[$r].Certificates[]? | select(.domain.main == $d)] | length > 0'
+      - "{{ mailcow_traefik_acme_store }}"
+  register: mailcow_acme_wait
+  changed_when: false
+  failed_when: false
+  until: mailcow_acme_wait.rc == 0
+  retries: 30
+  delay: 10
+
+- name: Assert Traefik holds a certificate for the mail host
+  ansible.builtin.assert:
+    that:
+      - mailcow_acme_wait.rc == 0
+    fail_msg: >-
+      Traefik has no certificate for {{ mailcow_hostname }} after
+      5 minutes. ACME needs port 80 reachable from the internet and the A
+      record resolving to this host. Check `docker logs traefik` for the
+      challenge failure.
+    quiet: true
+
+- name: Sync the certificate into mailcow
+  ansible.builtin.command:
+    cmd: /usr/local/sbin/{{ mailcow_cert_sync_unit }}.sh
+  register: mailcow_certsync
+  changed_when: "'installed a new certificate' in mailcow_certsync.stdout"
+
+- name: Confirm the certificate Postfix serves matches the mail hostname
+  ansible.builtin.command:
+    cmd: >-
+      timeout 15 openssl s_client -connect 127.0.0.1:{{ mailcow_ports.submission }}
+      -starttls smtp -servername {{ mailcow_hostname }}
+  register: mailcow_smtp_cert
+  changed_when: false
+  failed_when: false
+
+# The name in this certificate has to match the PTR and the HELO name, or
+# every receiver that checks them treats the sender as unverified.
+- name: Assert the SMTP certificate carries the mail hostname
+  ansible.builtin.assert:
+    that:
+      - mailcow_hostname in mailcow_smtp_cert.stdout
+      - "'self signed' not in mailcow_smtp_cert.stdout"
+    fail_msg: >-
+      The certificate served on port {{ mailcow_ports.submission }} does not
+      carry {{ mailcow_hostname }}, or is still mailcow's snake-oil default.
+      Traefik has a valid certificate, so the sync into
+      {{ mailcow_app_dir }}/data/assets/ssl/ or the container restart failed.
+    quiet: true

@@ -1,0 +1,52 @@
+---
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ mailcow_app_dir }}"
+
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "{{ mailcow_app_dir }}"
+    state: present
+    recreate: auto
+    # Deliberately false. mailcow's compose file is large and this role adds
+    # an override; a stray orphan is far cheaper than removing a container
+    # holding mail because a service was renamed upstream.
+    remove_orphans: false
+    wait: true
+    wait_timeout: 600
+  register: mailcow_deploy
+
+# The API is what every later step drives, and php-fpm seeds the api table on
+# start, so there is a window where the stack is "up" and the key is not yet
+# usable.
+- name: Wait for the mailcow API to answer
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/get/status/containers"
+    method: GET
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+    status_code: 200
+    timeout: 10
+  register: mailcow_api_ready
+  until: mailcow_api_ready.status == 200
+  retries: 60
+  delay: 10
+  no_log: true
+
+- name: Report the container states mailcow itself sees
+  ansible.builtin.set_fact:
+    mailcow_unhealthy: >-
+      {{ mailcow_api_ready.json | default({}) | dict2items
+         | rejectattr('value.state', 'eq', 'running')
+         | map(attribute='key') | list }}
+
+- name: Assert every mailcow container is running
+  ansible.builtin.assert:
+    that:
+      - mailcow_unhealthy | length == 0
+    fail_msg: >-
+      mailcow reports these containers as not running:
+      {{ mailcow_unhealthy | join(', ') }}.
+      Inspect with `docker compose -f {{ mailcow_app_dir }}/docker-compose.yml ps`.
+    quiet: true

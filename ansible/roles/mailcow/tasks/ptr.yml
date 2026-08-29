@@ -1,0 +1,91 @@
+---
+# Neither Ansible nor Terraform can set a reverse record — it is delegated to
+# whoever owns the IP block, which here is OVH. So this checks and refuses,
+# loudly, with the exact click path, rather than building a mail server whose
+# every message lands in spam for a reason nothing in the logs explains.
+
+- name: Resolve the reverse record for the IPv4 address
+  ansible.builtin.command:
+    argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", -x, "{{ mailcow_server_ipv4 }}"]
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_ptr4
+  changed_when: false
+
+- name: Resolve the reverse record for the IPv6 address
+  ansible.builtin.command:
+    argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", -x, "{{ mailcow_server_ipv6 }}"]
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_ptr6
+  changed_when: false
+
+# Every large receiver checks forward-confirmed reverse DNS. A mismatch here
+# is worth roughly a full point on mail-tester on its own, and Gmail rejects
+# IPv6 senders with no reverse using a permanent 5.7.1 that Postfix bounces
+# rather than retries.
+- name: Assert the IPv4 reverse record matches the mail hostname
+  ansible.builtin.assert:
+    that:
+      - mailcow_ptr4.stdout | trim | regex_replace('\.$', '') == mailcow_hostname
+    fail_msg: |
+      The IPv4 reverse record is wrong.
+
+        is      {{ mailcow_ptr4.stdout | trim | default('(none)', true) }}
+        must be {{ mailcow_hostname }}.
+
+      This cannot be set from Ansible or Terraform. Set it by hand:
+
+        OVH Manager > Bare Metal Cloud > Dedicated servers > ns3047408
+          > IP tab > line {{ mailcow_server_ipv4 }}
+          > "..." menu > Modify reverse
+          > enter: {{ mailcow_hostname }}
+
+      OVH rejects a reverse whose forward record does not already resolve to
+      that address. The A record is published and resolving, so it will be
+      accepted now.
+
+      Re-run once it is set, or set mailcow_require_ptr=false to build anyway
+      knowing outbound mail will be treated as unauthenticated.
+    quiet: true
+  when: mailcow_require_ptr
+
+- name: Assert the IPv6 reverse record matches the mail hostname
+  ansible.builtin.assert:
+    that:
+      - mailcow_ptr6.stdout | trim | regex_replace('\.$', '') == mailcow_hostname
+    fail_msg: |
+      The IPv6 reverse record is wrong.
+
+        is      {{ mailcow_ptr6.stdout | trim | default('(none)', true) }}
+        must be {{ mailcow_hostname }}.
+
+        OVH Manager > Bare Metal Cloud > Dedicated servers > ns3047408
+          > IP tab > line {{ mailcow_server_ipv6 }}
+          > "..." menu > Modify reverse
+          > enter: {{ mailcow_hostname }}
+    quiet: true
+  when:
+    - mailcow_require_ptr
+    - mailcow_enable_ipv6
+
+# Not fatal while outbound IPv6 is off, but it has to be visible: the AAAA is
+# published for internet.nl's reachability check, and the day IPv6 sending is
+# turned on a missing reverse becomes an immediate hard bounce.
+- name: Warn about a missing IPv6 reverse record
+  ansible.builtin.debug:
+    msg: >-
+      No IPv6 reverse record for {{ mailcow_server_ipv6 }}. Harmless while
+      mailcow_enable_ipv6 is false, since nothing sends over IPv6 — but set it
+      to {{ mailcow_hostname }} in the OVH manager before enabling IPv6.
+  when:
+    - not mailcow_enable_ipv6
+    - mailcow_ptr6.stdout | trim | regex_replace('\.$', '') != mailcow_hostname

@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  role_name: mailcow
+  author: Joachim Alexandre Jasmin
+  description: >-
+    mailcow-dockerized behind Traefik, with the Cloudflare DNS the mail setup
+    needs driven through the repo's own Terraform, and OIDC on the web UI
+    against Keycloak.
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Debian
+      versions:
+        - trixie
+  galaxy_tags:
+    - mail
+    - docker
+
+dependencies: []

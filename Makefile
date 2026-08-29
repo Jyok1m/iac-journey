@@ -2,11 +2,29 @@ VAULT_FILES := $(wildcard ansible/vaults/*) $(wildcard ansible/*/*/vault.yml)
 IS_ENCRYPTED = head -n1 "$$f" | grep -q '^\$$ANSIBLE_VAULT'
 
 .DEFAULT_GOAL := help
-.PHONY: help encrypt decrypt
+.PHONY: help encrypt decrypt mail mail-check
 
 help:
-	@echo "encrypt  chiffre les vaults non chiffrés"
-	@echo "decrypt  déchiffre les vaults chiffrés"
+	@echo "encrypt     chiffre les vaults non chiffrés"
+	@echo "decrypt     déchiffre les vaults chiffrés"
+	@echo "mail        déploie le serveur mail de bout en bout (DNS compris)"
+	@echo "mail-check  dry-run du rôle mailcow"
+
+# ------------------------------------------------------------------ #
+#                                Mail                                #
+# ------------------------------------------------------------------ #
+# L'unique point d'entrée : d'une machine nue à un serveur mail vérifié.
+# Terraform est piloté par le rôle, sur le nœud de contrôle — rien à lancer
+# à la main. TAGS=... pour ne rejouer qu'une étape (mailcow-dns,
+# mailcow-certs, mailcow-sso, mailcow-verify...).
+
+TAGS ?= mail
+
+mail:
+	ansible-playbook ansible/site.yml --tags "$(TAGS)"
+
+mail-check:
+	ansible-playbook ansible/site.yml --tags "$(TAGS)" --check --diff
 
 # ------------------------------------------------------------------ #
 #                            Ansible Vault                           #

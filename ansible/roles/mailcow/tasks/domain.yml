@@ -1,0 +1,120 @@
+---
+# mailcow's API is add-or-nothing: POST /add/domain on an existing domain
+# returns a "domain_exists" message with HTTP 200 rather than an error. So
+# every task here reads first and only writes what is missing, which is what
+# makes a second run report no change.
+
+- name: Read the domains mailcow already has
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/get/domain/all"
+    method: GET
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+    status_code: 200
+  register: mailcow_domains
+  changed_when: false
+  no_log: true
+
+- name: Create the mail domain
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/add/domain"
+    method: POST
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      domain: "{{ mailcow_domain }}"
+      description: "{{ mailcow_domain }} — managed by the ansible mailcow role"
+      aliases: 400
+      mailboxes: 50
+      defquota: 3072
+      maxquota: 10240
+      quota: 51200
+      active: 1
+      # Creating the DKIM key with the domain removes a round trip and makes
+      # the key available to the DNS pass that follows immediately after.
+      dkim_selector: "{{ mailcow_dkim_selector }}"
+      key_size: "{{ mailcow_dkim_key_size }}"
+    status_code: 200
+  when: mailcow_domain not in (mailcow_domains.json | default([]) | map(attribute='domain_name') | list)
+  changed_when: true
+  no_log: true
+
+- name: Read the mailboxes mailcow already has
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/get/mailbox/all"
+    method: GET
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+    status_code: 200
+  register: mailcow_existing_mailboxes
+  changed_when: false
+  no_log: true
+
+- name: Create the mailboxes
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/add/mailbox"
+    method: POST
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      local_part: "{{ item.local }}"
+      domain: "{{ mailcow_domain }}"
+      name: "{{ item.name }}"
+      quota: "{{ item.quota }}"
+      password: "{{ mailcow_vault_mailboxes[item.local] }}"
+      password2: "{{ mailcow_vault_mailboxes[item.local] }}"
+      active: 1
+    status_code: 200
+  loop: "{{ mailcow_mailboxes }}"
+  loop_control:
+    label: "{{ item.local }}@{{ mailcow_domain }}"
+  when: >-
+    (item.local ~ '@' ~ mailcow_domain) not in
+    (mailcow_existing_mailboxes.json | default([]) | map(attribute='username') | list)
+  changed_when: true
+  no_log: true
+
+- name: Read the aliases mailcow already has
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/get/alias/all"
+    method: GET
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+    status_code: 200
+  register: mailcow_existing_aliases
+  changed_when: false
+  no_log: true
+
+# The DMARC and TLS-RPT records name mailboxes that have to exist, or the
+# reports bounce and the receiving side stops sending them.
+- name: Create the report aliases
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/add/alias"
+    method: POST
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      address: "{{ item.address }}"
+      goto: "{{ item.goto }}"
+      active: 1
+    status_code: 200
+  loop: "{{ mailcow_aliases }}"
+  loop_control:
+    label: "{{ item.address }}"
+  when: >-
+    item.address not in
+    (mailcow_existing_aliases.json | default([]) | map(attribute='address') | list)
+  changed_when: true
+  no_log: true

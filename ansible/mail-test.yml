@@ -1,0 +1,63 @@
+---
+# Sends one real message from a real mailbox on the server, so deliverability
+# can be scored by an outside judge rather than asserted here.
+#
+#   ansible-playbook ansible/mail-test.yml -e mail_test_to=test-xxxx@srv1.mail-tester.com
+#
+# Submission goes through port 587 with SASL exactly as a mail client would,
+# rather than by dropping a file in the queue — that way the message travels
+# the same path a real one does, and is signed, aligned and queued identically.
+
+- name: Send a deliverability test message
+  hosts: portfolio
+  gather_facts: false
+  vars_files:
+    - vaults/mailcow.yml
+  vars:
+    mail_test_from: "info@{{ portfolio_domain_com }}"
+    mail_test_local: info
+  tasks:
+    - name: Require a destination
+      ansible.builtin.assert:
+        that:
+          - mail_test_to is defined
+          - mail_test_to | length > 0
+        fail_msg: >-
+          Pass the destination, e.g.
+          -e mail_test_to=test-xxxx@srv1.mail-tester.com
+        quiet: true
+
+    # always: rather than a plain following task. A failed send — wrong
+    # password, Postfix down, 587 closed — would otherwise end the play with
+    # the mailbox password still sitting on disk.
+    - name: Send a test message
+      block:
+        # Written out rather than passed as an argument so the credential
+        # never appears in a process listing on the host.
+        - name: Stage the sender
+          ansible.builtin.copy:
+            content: |
+              {{ mail_test_from }}
+              {{ mailcow_vault_mailboxes[mail_test_local] }}
+              {{ mail_test_to }}
+            dest: /root/.mailtest.creds
+            owner: root
+            group: root
+            mode: "0600"
+          no_log: true
+
+        - name: Send the message over submission with SASL
+          ansible.builtin.script:
+            cmd: files/send-test-mail.py /root/.mailtest.creds
+            executable: /usr/bin/python3
+          register: mail_test_result
+          changed_when: "'sent' in mail_test_result.stdout"
+      always:
+        - name: Remove the staged credential
+          ansible.builtin.file:
+            path: /root/.mailtest.creds
+            state: absent
+
+    - name: Report what the server did with it
+      ansible.builtin.debug:
+        msg: "{{ mail_test_result.stdout_lines }}"

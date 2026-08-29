@@ -60,8 +60,6 @@ services:
       DOCKER_CERT_PATH: /certs/client
       DOCKER_TLS_VERIFY: 1
       JENKINS_OPTS: --httpPort=8080
-      JENKINS_URL: https://{{ jenkins_host }}/
-      JAVA_OPTS: -Djenkins.model.Jenkins.crumbIssuerProxyCompatibility=true -Dhudson.security.csrf.DefaultCrumbIssuer.EXCLUDE_SESSION_ID=true
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/login >/dev/null"]
       interval: 30s

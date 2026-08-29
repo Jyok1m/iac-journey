@@ -1,0 +1,97 @@
+---
+# Computes the terraform inputs that cannot be written down ahead of time,
+# and does it before *every* terraform pass rather than only the last one.
+#
+# That matters more than it looks. Both mail_dkim_txt and mail_mta_sts_enabled
+# default to "absent" in the HCL, so a pass that omitted them once mailcow was
+# running would plan to delete a live DKIM record — a destructive plan, which
+# the guardrail then refuses, and the run dies on its second execution. Every
+# pass therefore reports the same current state, and a steady-state run plans
+# nothing.
+
+- name: Check whether the mailcow API is answering yet
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/get/status/containers"
+    method: GET
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+    status_code: [200, 401, 403]
+    timeout: 10
+  register: mailcow_api_probe
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+# Reset first, unconditionally. This file is imported once per terraform pass,
+# so a fact left over from the earlier pass would survive a failed API probe
+# in the later one and quietly republish a stale key as though it were fresh.
+- name: Start each pass with no DKIM key assumed
+  ansible.builtin.set_fact:
+    mailcow_dkim_txt: ""
+
+- name: Read the DKIM key back out of mailcow
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/get/dkim/{{ mailcow_domain }}"
+    method: GET
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+    status_code: 200
+    timeout: 10
+  register: mailcow_dkim_read
+  failed_when: false
+  changed_when: false
+  # The response carries privkey alongside the public record.
+  no_log: true
+  when: mailcow_api_probe.status | default(0) == 200
+
+# dkim_txt rather than pubkey: mailcow has already split a 2048-bit key across
+# the 255-byte character-string boundary, and reassembling that here would
+# reimplement the splitting badly.
+- name: Note the DKIM record value, if there is one yet
+  ansible.builtin.set_fact:
+    mailcow_dkim_txt: "{{ mailcow_dkim_read.json.dkim_txt | default('') }}"
+  when:
+    - mailcow_api_probe.status | default(0) == 200
+    - mailcow_dkim_read.json is defined
+    - mailcow_dkim_read.json.dkim_txt is defined
+
+# The policy is served dynamically by mailcow's PHP, so it only answers once
+# the stack is up and Traefik routes the name. Announcing the TXT before that
+# makes every sender fetch a 404 and file a TLS-RPT failure.
+- name: Check whether the MTA-STS policy is actually being served
+  ansible.builtin.uri:
+    url: "https://mta-sts.{{ mailcow_domain }}/.well-known/mta-sts.txt"
+    method: GET
+    status_code: 200
+    timeout: 10
+    return_content: true
+  register: mailcow_mta_sts_probe
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+
+- name: Note whether the MTA-STS policy is being served
+  ansible.builtin.set_fact:
+    mailcow_mta_sts_serving: >-
+      {{ (mailcow_mta_sts_probe.status | default(0) == 200
+          and 'STSv1' in (mailcow_mta_sts_probe.content | default(''))) | string }}
+
+# Written into the terraform directory rather than passed as -var, so the
+# configuration stands on its own and a bare `terraform plan` is honest.
+- name: Write the generated terraform inputs
+  ansible.builtin.template:
+    src: mail.generated.auto.tfvars.j2
+    dest: "{{ mailcow_terraform_dir }}/mail.generated.auto.tfvars"
+    mode: "0644"
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true

@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Ansible managed — do not edit manually.
+#
+# Traefik terminates TLS for the web surface, but it cannot terminate SMTP or
+# IMAP. Postfix and Dovecot read their certificate from data/assets/ssl/ on
+# disk, so the certificate Traefik obtained has to be copied there and the two
+# containers restarted.
+#
+# This is the path upstream documents: "You can also use any external ACME
+# client to obtain certificates, but you will need to make sure that they are
+# copied to the correct location and a post-hook reloads affected containers."
+# Traefik is the external client; this script is the post-hook. Driven by a
+# systemd .path unit watching acme.json, so a renewal that happens between
+# Ansible runs still reaches Postfix and Dovecot.
+#
+# Upstream is explicit that these must be real files, not symlinks: the
+# containers bind-mount the directory and a link would dangle inside them.
+
+set -euo pipefail
+
+ACME_STORE={{ mailcow_traefik_acme_store | quote }}
+RESOLVER={{ mailcow_traefik_acme_resolver | quote }}
+# Not HOSTNAME: that name is already bash's own and overwriting it here
+# would leak into every command this script runs.
+MAIL_HOST={{ mailcow_hostname | quote }}
+SSL_DIR={{ (mailcow_app_dir ~ "/data/assets/ssl") | quote }}
+PROJECT={{ mailcow_compose_project | quote }}
+
+log() { printf '%s certsync: %s\n' "$(date -Is)" "$*"; }
+
+[[ -s ${ACME_STORE} ]] || { log "no acme store at ${ACME_STORE}"; exit 1; }
+
+# Traefik stores the chain and key base64-encoded per certificate. Match on
+# the exact SAN rather than taking the first entry: this store holds a
+# certificate for every host on the box.
+cert=$(jq -re --arg d "${MAIL_HOST}" --arg r "${RESOLVER}" \
+  '.[$r].Certificates[] | select(.domain.main == $d) | .certificate' "${ACME_STORE}")
+key=$(jq -re --arg d "${MAIL_HOST}" --arg r "${RESOLVER}" \
+  '.[$r].Certificates[] | select(.domain.main == $d) | .key' "${ACME_STORE}")
+
+tmp=$(mktemp -d)
+trap 'rm -rf "${tmp}"' EXIT
+printf '%s' "${cert}" | base64 -d > "${tmp}/cert.pem"
+printf '%s' "${key}"  | base64 -d > "${tmp}/key.pem"
+
+# Refuse to install a key that does not belong to the certificate. A mismatch
+# would take Postfix and Dovecot down on restart, not at copy time.
+c_mod=$(openssl x509 -noout -modulus -in "${tmp}/cert.pem" | openssl sha256)
+k_mod=$(openssl rsa  -noout -modulus -in "${tmp}/key.pem"  2>/dev/null | openssl sha256 \
+        || openssl pkey -noout -pubout -in "${tmp}/key.pem" | openssl sha256)
+if [[ -n ${c_mod} && -n ${k_mod} && ${c_mod} != "${k_mod}" ]]; then
+  # EC keys have no modulus, so an empty comparison is not a failure.
+  if openssl rsa -noout -check -in "${tmp}/key.pem" >/dev/null 2>&1; then
+    log "certificate and key do not match, refusing to install"
+    exit 1
+  fi
+fi
+
+openssl x509 -noout -checkend 0 -in "${tmp}/cert.pem" >/dev/null || {
+  log "certificate for ${MAIL_HOST} is already expired, refusing to install"
+  exit 1
+}
+
+install -d -m 0755 -o root -g root "${SSL_DIR}"
+
+# Nothing to do unless the material actually changed — this script runs on
+# every write to acme.json, and Traefik rewrites that file for any host.
+if cmp -s "${tmp}/cert.pem" "${SSL_DIR}/cert.pem" \
+   && cmp -s "${tmp}/key.pem" "${SSL_DIR}/key.pem"; then
+  log "certificate for ${MAIL_HOST} unchanged"
+  exit 0
+fi
+
+install -m 0644 -o root -g root "${tmp}/cert.pem" "${SSL_DIR}/cert.pem"
+install -m 0600 -o root -g root "${tmp}/key.pem"  "${SSL_DIR}/key.pem"
+log "installed a new certificate for ${MAIL_HOST}"
+
+# Upstream documents restart, not reload: neither Postfix nor Dovecot re-reads
+# the certificate on SIGHUP in these images. nginx is included because it
+# serves the same file for the autoconfig endpoints.
+for svc in postfix-mailcow dovecot-mailcow nginx-mailcow; do
+  cid=$(docker ps -q --filter "name=${PROJECT}-${svc}-1")
+  if [[ -n ${cid} ]]; then
+    docker restart "${cid}" >/dev/null && log "restarted ${svc}"
+  else
+    log "${svc} is not running, skipped"
+  fi
+done

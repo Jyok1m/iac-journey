@@ -1,4 +1,9 @@
 terraform {
+  # variables.tf marks the Cloudflare token `ephemeral`, which is 1.10 and
+  # later. Without this pin an older control node fails inside the role with
+  # an unhelpful parse error rather than a version message.
+  required_version = ">= 1.10"
+
   required_providers {
     cloudflare = {
       source  = "cloudflare/cloudflare"

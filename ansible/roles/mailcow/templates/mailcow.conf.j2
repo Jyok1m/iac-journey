@@ -1,0 +1,130 @@
+# Ansible managed — do not edit manually, and do not run generate_config.sh
+# against it. That script is interactive, overwrites rather than merges, and
+# its IPv6 step offers to rewrite /etc/docker/daemon.json and restart the
+# Docker daemon — which on this host would bounce nine unrelated stacks.
+#
+# Every value generate_config.sh would have produced is set here, with the
+# four secrets it would have randomised taken from ansible-vault instead so a
+# rebuild reaches the same state rather than a new one.
+
+MAILCOW_HOSTNAME={{ mailcow_hostname }}
+MAILCOW_PASS_SCHEME=BLF-CRYPT
+
+# ---------------------------- Database ----------------------------- #
+# DBPASS, DBROOT and REDISPASS are unrecoverable once the databases are
+# initialised: they are not read from here at runtime, they are what the
+# stored credentials already are. Losing them means losing the data.
+DBNAME=mailcow
+DBUSER=mailcow
+DBPASS={{ mailcow_vault_dbpass }}
+DBROOT={{ mailcow_vault_dbroot }}
+REDISPASS={{ mailcow_vault_redispass }}
+
+# ---------------------------- HTTP(S) ------------------------------- #
+# Traefik owns host ports 80 and 443. mailcow publishes host port == container
+# port by design, so changing these moves nginx's listen directive too.
+# Bound to the loopback: Traefik reaches the container over the shared docker
+# network, so nothing needs to be exposed on a routable address.
+HTTP_PORT={{ mailcow_http_port }}
+HTTP_BIND={{ mailcow_http_bind }}
+HTTPS_PORT={{ mailcow_https_port }}
+HTTPS_BIND={{ mailcow_https_bind }}
+
+# Traefik already redirects web to websecure at the entrypoint. Leaving this
+# on would produce a second redirect behind the first.
+HTTP_REDIRECT=n
+
+# --------------------------- Mail ports ----------------------------- #
+SMTP_PORT={{ mailcow_ports['smtp'] }}
+SMTPS_PORT={{ mailcow_ports['smtps'] }}
+SUBMISSION_PORT={{ mailcow_ports['submission'] }}
+IMAP_PORT={{ mailcow_ports['imap'] }}
+IMAPS_PORT={{ mailcow_ports['imaps'] }}
+POP_PORT={{ mailcow_ports['pop'] }}
+POPS_PORT={{ mailcow_ports['pops'] }}
+SIEVE_PORT={{ mailcow_ports['sieve'] }}
+
+# Loopback only, as upstream requires.
+DOVEADM_PORT=127.0.0.1:19991
+SQL_PORT=127.0.0.1:13306
+REDIS_PORT=127.0.0.1:7654
+
+TZ={{ mailcow_timezone }}
+COMPOSE_PROJECT_NAME={{ mailcow_compose_project }}
+DOCKER_COMPOSE_VERSION=native
+
+ACL_ANYONE=disallow
+MAILDIR_GC_TIME=7200
+
+# ------------------------------ TLS --------------------------------- #
+# acme-mailcow is off: Traefik is the single ACME client on this host, and
+# certs are copied in by the {{ mailcow_cert_sync_unit }} unit. This is the
+# path upstream documents as "use any external ACME client, copy them to the
+# correct location and have a post-hook reload affected containers".
+SKIP_LETS_ENCRYPT={{ 'y' if mailcow_skip_lets_encrypt else 'n' }}
+ACME_DNS_CHALLENGE=n
+ACME_DNS_PROVIDER=dns_xxx
+ACME_ACCOUNT_EMAIL={{ mailcow_acme_email }}
+ADDITIONAL_SAN=
+AUTODISCOVER_SAN=n
+
+# Names Traefik routes here besides MAILCOW_HOSTNAME. Without this, nginx
+# answers a name it does not recognise with the wrong site.
+ADDITIONAL_SERVER_NAMES={{ mailcow_additional_server_names | join(',') }}
+
+ENABLE_SSL_SNI=n
+SKIP_IP_CHECK=n
+SKIP_HTTP_VERIFICATION=n
+SKIP_UNBOUND_HEALTHCHECK=n
+SKIP_CLAMD={{ 'y' if mailcow_skip_clamd else 'n' }}
+SKIP_OLEFY=n
+SKIP_SOGO=n
+SKIP_FTS={{ 'y' if mailcow_skip_fts else 'n' }}
+FTS_HEAP={{ mailcow_fts_heap }}
+FTS_PROCS={{ mailcow_fts_procs }}
+
+ALLOW_ADMIN_EMAIL_LOGIN=n
+
+# --------------------------- Watchdog ------------------------------- #
+USE_WATCHDOG=y
+WATCHDOG_NOTIFY_BAN=n
+WATCHDOG_NOTIFY_START=y
+WATCHDOG_EXTERNAL_CHECKS=n
+WATCHDOG_VERBOSE=n
+LOG_LINES=9999
+
+# --------------------------- Networking ----------------------------- #
+IPV4_NETWORK={{ mailcow_ipv4_network }}
+IPV6_NETWORK={{ mailcow_ipv6_network }}
+
+# IPv6 inside mailcow's own bridge. Off deliberately: enabling it needs
+# /etc/docker/daemon.json and a daemon restart, which would bounce every other
+# stack on this host. Inbound IPv6 to the published ports still works —
+# docker-proxy listens on [::] regardless — which is what internet.nl's
+# reachability subtest measures. Turn on only once the IPv6 PTR is in place.
+ENABLE_IPV6={{ mailcow_enable_ipv6 | lower }}
+
+DISABLE_NETFILTER_ISOLATION_RULE=n
+
+MAILDIR_SUB=Maildir
+SOGO_EXPIRE_SESSION=480
+# Exactly 16 characters. SOGo derives its URL cipher from this; a different
+# length silently breaks webmail links.
+SOGO_URL_ENCRYPTION_KEY={{ mailcow_vault_sogo_key }}
+
+# Empty on purpose — mailcow generates and rotates these itself on start.
+DOVECOT_MASTER_USER=
+DOVECOT_MASTER_PASS=
+
+WEBAUTHN_ONLY_TRUSTED_VENDORS=n
+SPAMHAUS_DQS_KEY=
+
+# ------------------------------ API --------------------------------- #
+# This is what makes the run automatable: the phpfpm entrypoint seeds the
+# `api` table from these on every container start, deleting the previous row
+# first, so it is idempotent. API_KEY is ignored entirely unless
+# API_ALLOW_FROM validates to a non-empty list — the key insert is nested
+# inside that check. {{ mailcow_ipv4_network }}.1 is the address the container
+# sees for a call made from the host over the published loopback port.
+API_KEY={{ mailcow_vault_api_key }}
+API_ALLOW_FROM={{ mailcow_api_allow_from | join(',') }}

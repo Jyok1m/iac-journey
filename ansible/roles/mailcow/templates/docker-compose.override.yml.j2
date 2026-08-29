@@ -1,0 +1,46 @@
+# Ansible managed — do not edit manually.
+#
+# Compose merges this over the upstream docker-compose.yml, which is left
+# untouched so `git checkout` of a new tag stays a clean fast-forward.
+#
+# Two jobs: put nginx-mailcow on the Traefik network with routers for every
+# name mailcow answers to, and mount the hardened Postfix overrides.
+
+services:
+  nginx-mailcow:
+    networks:
+      # Upstream's own network has to be repeated — compose replaces the list
+      # rather than appending to it, and dropping it would cut nginx off from
+      # php-fpm.
+      mailcow-network:
+        aliases:
+          - nginx
+      {{ mailcow_traefik_network }}: {}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network={{ mailcow_traefik_network }}
+      - traefik.http.routers.mailcow.rule={{ mailcow_router_rule }}
+      - traefik.http.routers.mailcow.entrypoints=websecure
+      - traefik.http.routers.mailcow.tls.certresolver={{ mailcow_traefik_acme_resolver }}
+      - traefik.http.routers.mailcow.service=mailcow
+{% for host in [mailcow_hostname] + mailcow_additional_server_names %}
+      - traefik.http.routers.mailcow.tls.domains[{{ loop.index0 }}].main={{ host }}
+{% endfor %}
+      # Plain HTTP to the container. TLS is terminated by Traefik for the web
+      # surface; the certificate Postfix and Dovecot serve is a separate
+      # concern handled by the {{ mailcow_cert_sync_unit }} unit.
+      - traefik.http.services.mailcow.loadbalancer.server.port={{ mailcow_http_port }}
+      - traefik.http.services.mailcow.loadbalancer.server.scheme=http
+
+# Deliberately no volume override for postfix-mailcow. Upstream already mounts
+# the whole ./data/conf/postfix directory, so the templated extra.cf is
+# visible to the container without any help. Bind-mounting the single file on
+# top of that broke postfix.sh: it runs `sed -i` over extra.cf, sed -i writes a
+# temp file and renames it into place, and rename across a bind-mount point
+# fails with EBUSY. The dedupe step silently did nothing while the append that
+# follows it kept working, so the host name directive gained one duplicate
+# line per container start.
+
+networks:
+  {{ mailcow_traefik_network }}:
+    external: true

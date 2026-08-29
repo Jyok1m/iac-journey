@@ -1,0 +1,44 @@
+---
+# Handlers run in the order they are DEFINED here, not the order they are
+# notified. Only one ordering constraint actually matters: systemd is reloaded
+# before anything tries to start a unit.
+#
+# Note that a change touching both mailcow.conf and extra.cf bounces Postfix
+# twice — once inside the recreate, once on its own. No ordering of these two
+# avoids that, so it is accepted rather than explained away.
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Recreate mailcow
+  community.docker.docker_compose_v2:
+    project_src: "{{ mailcow_app_dir }}"
+    state: present
+    recreate: auto
+    remove_orphans: false
+    wait: true
+    wait_timeout: 600
+
+- name: Restart postfix
+  community.docker.docker_compose_v2:
+    project_src: "{{ mailcow_app_dir }}"
+    services:
+      - postfix-mailcow
+    state: restarted
+    wait: true
+    wait_timeout: 180
+
+- name: Restart dovecot
+  community.docker.docker_compose_v2:
+    project_src: "{{ mailcow_app_dir }}"
+    services:
+      - dovecot-mailcow
+    state: restarted
+    wait: true
+    wait_timeout: 180
+
+# There is deliberately no certificate-sync handler. certs.yml runs the sync
+# as an ordinary task, after the stack is up, because the sync depends on
+# Traefik already holding a certificate — which cannot be true at the point a
+# config change would fire a handler.

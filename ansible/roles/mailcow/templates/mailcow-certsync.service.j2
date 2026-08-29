@@ -1,0 +1,15 @@
+# Ansible managed — do not edit manually.
+
+[Unit]
+Description=Copy Traefik's certificate for {{ mailcow_hostname }} into mailcow
+Documentation=https://docs.mailcow.email/post_installation/firststeps-ssl/
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/{{ mailcow_cert_sync_unit }}.sh
+# Traefik writes acme.json more than once during a renewal, so the path unit
+# can fire while the file is still being assembled. A short delay lets the
+# write settle, and a failed run is retried by the next write anyway.
+ExecStartPre=/bin/sleep 5

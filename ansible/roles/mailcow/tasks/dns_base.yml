@@ -1,0 +1,63 @@
+---
+# First DNS pass. Publishes everything that does not depend on mailcow being
+# up, then blocks until a public resolver actually returns it — ACME fails
+# outright if it runs against a name that has not propagated, and the failure
+# surfaces as an opaque certificate error much later.
+
+- name: Work out what terraform can know at this point
+  ansible.builtin.import_tasks: tf_vars.yml
+
+- name: Publish the base mail records
+  ansible.builtin.include_tasks: terraform_apply.yml
+  vars:
+    mailcow_tf_purpose: base mail records
+
+- name: Wait for the records to resolve from a public resolver
+  ansible.builtin.command:
+    argv: [dig, +short, "@{{ item.0 }}", "{{ item.1.name }}", "{{ item.1.type }}"]
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_dns_check
+  changed_when: false
+  until: mailcow_dns_check.stdout | trim | length > 0
+  retries: "{{ mailcow_dns_propagation_retries }}"
+  delay: "{{ mailcow_dns_propagation_delay }}"
+  loop: "{{ mailcow_dns_resolvers | product(mailcow_dns_required_records) | list }}"
+  loop_control:
+    label: "{{ item.1.type }} {{ item.1.name }} @{{ item.0 }}"
+
+- name: Confirm the A record points at this host and not at the proxy
+  ansible.builtin.command:
+    argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", "{{ mailcow_hostname }}", A]
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_a_check
+  changed_when: false
+  # A single dropped UDP query would otherwise fail the whole run on a record
+  # that is demonstrably fine — which is exactly what happened once.
+  until: mailcow_a_check.stdout | trim | length > 0
+  retries: 6
+  delay: 5
+
+# A proxied record resolves to a Cloudflare edge address, which terminates
+# HTTP and speaks no SMTP. The record would look present and work for the web
+# UI while silently making the MX useless.
+- name: Assert the mail host is not behind the Cloudflare proxy
+  ansible.builtin.assert:
+    that:
+      - mailcow_a_check.stdout_lines | length == 1
+      - mailcow_a_check.stdout | trim == mailcow_server_ipv4
+    fail_msg: >-
+      {{ mailcow_hostname }} resolves to
+      {{ mailcow_a_check.stdout_lines | join(', ') }} rather than
+      {{ mailcow_server_ipv4 }}. That is the Cloudflare proxy answering, which
+      accepts no SMTP. The record must be DNS-only (grey cloud).
+    quiet: true

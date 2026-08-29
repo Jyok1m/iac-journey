@@ -46,6 +46,22 @@
   tags: [system-apps]
 
 # ------------------------------------------------------------------ #
+#                                Mail                                #
+# ------------------------------------------------------------------ #
+# A play of its own rather than a role under system-apps: this one also
+# drives terraform on the control node, and it has to run after keycloak
+# so the OIDC client has a realm to be created in.
+
+- name: Install the mail server
+  hosts: portfolio
+  vars_files:
+    - vaults/mailcow.yml
+    - vaults/keycloak.yml
+  roles:
+    - {role: mailcow, tags: [mailcow]}
+  tags: [mail]
+
+# ------------------------------------------------------------------ #
 #                            Personal Apps                           #
 # ------------------------------------------------------------------ #
 

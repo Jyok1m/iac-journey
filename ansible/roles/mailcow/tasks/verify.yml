@@ -1,0 +1,200 @@
+---
+# Proves the result instead of asserting it. Everything here reads live state
+# — DNS from a public resolver, the certificate off the wire, the banner from
+# the port — so a green run means the outside world sees what we think it does.
+
+# Handlers otherwise fire at the end of the play, which is after this file.
+# On a run where the Postfix or Dovecot overrides changed, every cipher check
+# below would measure the configuration that is about to be replaced and the
+# summary would report a state that no longer exists.
+- name: Apply any pending restarts before measuring anything
+  ansible.builtin.meta: flush_handlers
+
+- name: Collect every mail record from a public resolver
+  ansible.builtin.command:
+    argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", "{{ item.name }}", "{{ item.type }}"]
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_verify_dns
+  changed_when: false
+  loop: "{{ mailcow_dns_required_records + mailcow_dns_verify_extra }}"
+  loop_control:
+    label: "{{ item.type }} {{ item.name }}"
+
+- name: Assert every required record resolves
+  ansible.builtin.assert:
+    that:
+      - item.stdout | trim | length > 0
+    fail_msg: "{{ item.item.type }} {{ item.item.name }} does not resolve."
+    quiet: true
+  loop: "{{ mailcow_verify_dns.results }}"
+  loop_control:
+    label: "{{ item.item.type }} {{ item.item.name }}"
+
+# Read on the server, not from the control node. What this proves is that
+# MAILCOW_HOSTNAME reached Postfix's myhostname, and a local read settles that
+# completely. Whether 25 is reachable from outside is a different question,
+# asked below — many ISPs block outbound 25, and a control node behind one
+# would report a perfectly good mail server as broken.
+- name: Read the SMTP banner on port 25
+  ansible.builtin.command:
+    cmd: >-
+      timeout 20 python3 -c
+      "import socket,sys; s=socket.create_connection(('127.0.0.1',25),10); s.settimeout(15);
+      sys.stdout.write(s.recv(128).decode(errors='replace')); s.close()"
+  register: mailcow_banner
+  changed_when: false
+
+# The HELO name, the PTR and the certificate CN have to be the same string.
+# Every large receiver checks at least two of the three against each other.
+- name: Assert the SMTP banner announces the mail hostname
+  ansible.builtin.assert:
+    that:
+      - mailcow_hostname in mailcow_banner.stdout
+    fail_msg: >-
+      Port 25 announces "{{ mailcow_banner.stdout | trim }}" rather than
+      {{ mailcow_hostname }}. MAILCOW_HOSTNAME feeds Postfix's myhostname, so
+      this means mailcow.conf did not reach the container.
+    quiet: true
+
+- name: Check the certificate served on each TLS port
+  ansible.builtin.command:
+    cmd: >-
+      timeout 20 openssl s_client -connect {{ mailcow_hostname }}:{{ item.port }}
+      {{ item.starttls }} -servername {{ mailcow_hostname }}
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_verify_tls
+  changed_when: false
+  failed_when: false
+  loop: "{{ mailcow_tls_checks }}"
+  loop_control:
+    label: "{{ item.port }}"
+
+- name: Assert every reachable TLS port serves a trusted certificate
+  ansible.builtin.assert:
+    that:
+      - "'Verify return code: 0 (ok)' in item.stdout"
+      - mailcow_hostname in item.stdout
+    fail_msg: >-
+      Port {{ item.item.port }} is reachable but does not serve a trusted
+      certificate for {{ mailcow_hostname }}.
+    quiet: true
+  loop: "{{ mailcow_verify_tls.results }}"
+  loop_control:
+    label: "{{ item.item.port }}"
+  # rc, not the presence of "CONNECTED". An ISP that swallows port 25 still
+  # completes the TCP handshake, so openssl prints CONNECTED — and then
+  # "Verify return code: 0 (ok)" on a handshake that read zero bytes and saw
+  # no certificate at all. Only a zero exit means a real handshake happened.
+  when: item.rc == 0
+
+# A control node on a domestic connection usually cannot open port 25 at all,
+# which says nothing about the server. Name what could not be checked from
+# here rather than failing on it — or, worse, passing silently.
+- name: Note any port unreachable from the control node
+  ansible.builtin.debug:
+    msg: >-
+      Port(s) {{ mailcow_unreachable | join(', ') }} could not be opened from
+      the control node, so the certificate there is unverified from outside.
+      That is almost always the control node's own ISP blocking outbound 25
+      rather than anything on the server — confirm with
+      `openssl s_client -connect gmail-smtp-in.l.google.com:25`. External
+      reachability of 25 is proven instead by mail-tester and by internet.nl's
+      MX reachability subtest.
+  vars:
+    mailcow_unreachable: >-
+      {{ mailcow_verify_tls.results | rejectattr('rc', 'eq', 0)
+         | map(attribute='item.port') | list }}
+  when: mailcow_verify_tls.results | rejectattr('rc', 'eq', 0) | list | length > 0
+
+# Checked from the control node, over the public name, so this exercises the
+# whole path: DNS, Traefik's router, its certificate, and mailcow's nginx.
+# Its absence is why a broken Traefik rule went unnoticed while every other
+# check passed — a malformed rule fails the router silently and Traefik
+# answers its own 404, which looks identical to a healthy proxy with nothing
+# behind it.
+- name: Fetch each HTTP surface over its public name
+  ansible.builtin.uri:
+    url: "https://{{ item.host }}{{ item.path }}"
+    method: GET
+    status_code: [200, 301, 302]
+    timeout: 20
+    follow_redirects: all
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_http_check
+  failed_when: false
+  changed_when: false
+  loop: "{{ mailcow_http_checks }}"
+  loop_control:
+    label: "{{ item.name }} — {{ item.host }}"
+
+- name: Assert every HTTP surface answers
+  ansible.builtin.assert:
+    that:
+      - item.status in [200, 301, 302]
+    fail_msg: >-
+      {{ item.item.name }} at https://{{ item.item.host }}{{ item.item.path }}
+      returned {{ item.status | default('no response') }}.
+      A 404 on the root of {{ mailcow_hostname }} is Traefik's own, meaning no
+      router matched: check `docker logs traefik | grep mailcow` for a rule
+      parse error — Traefik's Host() matcher takes exactly one name, so
+      several names must be joined with || rather than passed as arguments —
+      and confirm nginx-mailcow is attached to {{ mailcow_traefik_network }}.
+    quiet: true
+  loop: "{{ mailcow_http_check.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Read the DNSSEC state of the zone
+  ansible.builtin.command:
+    argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", "{{ mailcow_domain }}", DS]
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_ds
+  changed_when: false
+
+# Not fatal — the mail server works unsigned. But DANE is impossible without
+# it and internet.nl scores DNSSEC as a full fifth of the total, so a silent
+# pass here would misrepresent how finished this is.
+- name: Report that the zone is still unsigned
+  ansible.builtin.debug:
+    msg: |
+      The zone has no DS record, so DNSSEC is incomplete and DANE cannot be
+      published. Cloudflare is signing already; the DS has to be entered at
+      the registrar, which no credential in this repo can reach:
+
+        terraform -chdir={{ mailcow_terraform_dir }} output mail_dnssec_ds
+
+      Paste that at domains.squarespace.com > {{ mailcow_domain }} > DNS > DNSSEC.
+  when: mailcow_ds.stdout | trim | length == 0
+
+- name: Split the TLS ports by whether they could be checked from here
+  ansible.builtin.set_fact:
+    mailcow_tls_ok: "{{ mailcow_verify_tls.results | selectattr('rc', 'eq', 0) | map(attribute='item.port') | list }}"
+    mailcow_tls_unchecked: "{{ mailcow_verify_tls.results | rejectattr('rc', 'eq', 0) | map(attribute='item.port') | list }}"
+
+- name: Summarise what was proved
+  ansible.builtin.debug:
+    msg:
+      - "DNS         {{ mailcow_verify_dns.results | length }} records resolve from {{ mailcow_dns_resolvers | first }}"
+      - "SMTP        {{ mailcow_banner.stdout | trim }}"
+      - "TLS         trusted cert for {{ mailcow_hostname }} on {{ mailcow_tls_ok | join(', ') }}"
+      - "TLS         unchecked from the control node: {{ mailcow_tls_unchecked | join(', ') | default('none', true) }}"
+      - "DNSSEC      {{ 'signed' if mailcow_ds.stdout | trim | length > 0 else 'UNSIGNED — DS not at the registrar' }}"
+      - "SSO         UI via Keycloak; SOGo via the UI session; IMAP/SMTP by app password, not Keycloak"

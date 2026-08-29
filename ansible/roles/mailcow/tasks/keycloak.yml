@@ -1,0 +1,178 @@
+---
+# Provider mode "keycloak", not "generic-oidc".
+#
+# The choice is forced by mailcow's own code rather than by preference:
+# user_login() switches on authsource with cases for keycloak, ldap and
+# mailcow only. A mailbox marked generic-oidc matches nothing and falls
+# through to `return false`, so those users can authenticate nowhere outside a
+# live browser session — not even the UI login form. The keycloak mode also
+# brings periodic sync and user import, which generic-oidc has no fields for.
+#
+# What this does NOT achieve is bar item 7 in full. Dovecot in mailcow
+# advertises `auth_mechanisms = plain login` and nothing else, so IMAP and
+# SMTP cannot speak OIDC at all; Postfix delegates SASL to that same passdb
+# and inherits the limit. Even mailcow's "mailpassword flow" does not fix it —
+# it compares the offered password against a bcrypt hash held in a Keycloak
+# *attribute* via the Admin REST API, so the credential Keycloak itself holds
+# is never consulted. Mail clients therefore use app passwords. Recorded as
+# deviation SSO-1 in the decision log, and stated rather than worked around.
+
+- name: Assert the Keycloak admin credentials are in the vault
+  ansible.builtin.assert:
+    that:
+      - keycloak_vault_admin_user | default('') | length > 0
+      - keycloak_vault_admin_password | default('') | length > 0
+    fail_msg: >-
+      ansible/vaults/keycloak.yml must define keycloak_vault_admin_user and
+      keycloak_vault_admin_password for the mailcow client to be created in
+      realm '{{ mailcow_keycloak_realm }}'. Nothing else in this role needs
+      them; run with --skip-tags mailcow-sso to build without SSO.
+    quiet: true
+
+- name: Create the mailcow client in Keycloak
+  community.general.keycloak_client:
+    auth_keycloak_url: "{{ mailcow_keycloak_url }}"
+    auth_realm: homelab
+    auth_client_id: admin-cli
+    auth_username: "{{ keycloak_vault_admin_user }}"
+    auth_password: "{{ keycloak_vault_admin_password }}"
+    realm: "{{ mailcow_keycloak_realm }}"
+    client_id: "{{ mailcow_keycloak_client_id }}"
+    name: mailcow
+    description: Mail server web UI — managed by the ansible mailcow role
+    protocol: openid-connect
+    # Confidential: mailcow holds a client secret and uses the service account.
+    public_client: false
+    standard_flow_enabled: true
+    # mailcow never issues a password grant — the only grant types in its
+    # codebase are authorization_code and client_credentials — so leaving this
+    # on would widen the attack surface for nothing.
+    direct_access_grants_enabled: false
+    # Required for the Admin REST calls mailcow makes to read users.
+    service_accounts_enabled: true
+    redirect_uris:
+      - "{{ mailcow_keycloak_redirect_url }}/*"
+    web_origins:
+      - "{{ mailcow_keycloak_redirect_url }}"
+    state: present
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_kc_client
+  no_log: true
+
+- name: Grant the service account permission to read users
+  community.general.keycloak_client_rolemapping:
+    auth_keycloak_url: "{{ mailcow_keycloak_url }}"
+    auth_realm: homelab
+    auth_client_id: admin-cli
+    auth_username: "{{ keycloak_vault_admin_user }}"
+    auth_password: "{{ keycloak_vault_admin_password }}"
+    realm: "{{ mailcow_keycloak_realm }}"
+    client_id: realm-management
+    service_account_user_client_id: "{{ mailcow_keycloak_client_id }}"
+    roles:
+      - name: view-users
+    state: present
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  no_log: true
+
+- name: Read the client secret back
+  community.general.keycloak_clientsecret_info:
+    auth_keycloak_url: "{{ mailcow_keycloak_url }}"
+    auth_realm: homelab
+    auth_client_id: admin-cli
+    auth_username: "{{ keycloak_vault_admin_user }}"
+    auth_password: "{{ keycloak_vault_admin_password }}"
+    realm: "{{ mailcow_keycloak_realm }}"
+    client_id: "{{ mailcow_keycloak_client_id }}"
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+  register: mailcow_kc_secret
+  no_log: true
+
+- name: Read mailcow's current identity provider settings
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/get/identity-provider"
+    method: GET
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+    status_code: 200
+  register: mailcow_idp_current
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Point mailcow at Keycloak
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/edit/identity-provider"
+    method: POST
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      authsource: keycloak
+      server_url: "{{ mailcow_keycloak_url }}"
+      realm: "{{ mailcow_keycloak_realm }}"
+      client_id: "{{ mailcow_keycloak_client_id }}"
+      client_secret: "{{ mailcow_kc_secret.clientsecret_info.value }}"
+      redirect_url: "{{ mailcow_keycloak_redirect_url }}"
+      # mailcow's bundled provider only adds the openid scope when this
+      # parses as >= 20.0.0. Blank means no id_token and a login that fails
+      # with nothing useful in the logs.
+      version: "{{ mailcow_keycloak_version }}"
+      # Off: it would store a second, separate bcrypt hash as a Keycloak user
+      # attribute and present it as though Keycloak were authenticating IMAP.
+      # It is not, and the two passwords would drift apart silently.
+      mailpassword_flow: 0
+      periodic_sync: 0
+      import_users: 0
+      sync_interval: 15
+      ignore_ssl_error: 0
+      login_provisioning: 1
+      default_template: Default
+    status_code: 200
+  register: mailcow_idp_set
+  changed_when: >-
+    (mailcow_idp_current.json | default({})).authsource | default('') != 'keycloak'
+    or (mailcow_idp_current.json | default({})).client_id | default('') != mailcow_keycloak_client_id
+  no_log: true
+
+- name: Ask mailcow to test the connection to Keycloak
+  ansible.builtin.uri:
+    url: "{{ mailcow_api_url }}/api/v1/edit/identity-provider-test"
+    method: POST
+    headers:
+      X-API-Key: "{{ mailcow_vault_api_key }}"
+      Host: "{{ mailcow_hostname }}"
+      Content-Type: application/json
+    body_format: json
+    body: {}
+    status_code: 200
+  register: mailcow_idp_test
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Report the identity provider test result
+  ansible.builtin.debug:
+    msg: >-
+      mailcow's Keycloak connection test returned
+      {{ (mailcow_idp_test.json | default([{}])) | to_json }}.
+      UI login goes through Keycloak; SOGo follows the UI session; IMAP and
+      SMTP use app passwords and do not reach Keycloak at all.

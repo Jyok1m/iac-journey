@@ -1,0 +1,63 @@
+---
+# Ordering is the whole problem this role solves.
+#
+#   preflight  refuses to build on a host that cannot deliver mail at all
+#   dns_base   publishes A/AAAA/MX/SPF/DMARC and waits for them to resolve
+#   ptr        fails loudly with the OVH action if the reverse is still wrong
+#   install    checks out the pinned upstream tree
+#   config     renders mailcow.conf and the overrides this role owns
+#   deploy     brings the stack up
+#   certs      copies Traefik's certificate in and arms the renewal hook
+#   domain     creates the mail domain and mailboxes over the API
+#   dkim       reads the key back out and feeds it to a second terraform pass
+#   keycloak   creates the OIDC client and points mailcow at it
+#   verify     proves the result rather than asserting it
+#
+# The DKIM key cannot exist before the stack runs and the domain is created,
+# and ACME cannot succeed before DNS resolves — which is why DNS is applied
+# in two passes rather than one.
+
+- name: Refuse to build on a host that cannot deliver mail
+  ansible.builtin.import_tasks: preflight.yml
+  tags: [mailcow, mailcow-preflight]
+
+- name: Publish the DNS records the stack depends on
+  ansible.builtin.import_tasks: dns_base.yml
+  tags: [mailcow, mailcow-dns]
+
+- name: Check the reverse record
+  ansible.builtin.import_tasks: ptr.yml
+  tags: [mailcow, mailcow-dns, mailcow-ptr]
+
+- name: Check out mailcow-dockerized
+  ansible.builtin.import_tasks: install.yml
+  tags: [mailcow, mailcow-install]
+
+- name: Render the configuration this role owns
+  ansible.builtin.import_tasks: config.yml
+  tags: [mailcow, mailcow-config]
+
+- name: Deploy the stack
+  ansible.builtin.import_tasks: deploy.yml
+  tags: [mailcow, mailcow-deploy]
+
+- name: Deliver certificates to Postfix and Dovecot
+  ansible.builtin.import_tasks: certs.yml
+  tags: [mailcow, mailcow-certs]
+
+- name: Create the mail domain and mailboxes
+  ansible.builtin.import_tasks: domain.yml
+  tags: [mailcow, mailcow-domain]
+
+- name: Publish the DKIM key mailcow generated
+  ansible.builtin.import_tasks: dkim.yml
+  tags: [mailcow, mailcow-dns, mailcow-dkim]
+
+- name: Wire the identity provider
+  ansible.builtin.import_tasks: keycloak.yml
+  when: mailcow_keycloak_enabled
+  tags: [mailcow, mailcow-sso]
+
+- name: Prove the result
+  ansible.builtin.import_tasks: verify.yml
+  tags: [mailcow, mailcow-verify]
