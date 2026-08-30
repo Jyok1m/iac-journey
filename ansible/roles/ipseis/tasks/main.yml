@@ -1,10 +1,12 @@
 ---
+# Group-owned by the deploy account: Jenkins runs `docker compose` here over
+# SSH, and Compose stats the project directory before it reads anything in it.
 - name: Create stack directory
   ansible.builtin.file:
     path: "{{ ipseis_app_dir }}"
     state: directory
     owner: root
-    group: root
+    group: "{{ ipseis_deploy_group }}"
     mode: "0750"
 
 # Bind-mount sources. Docker would create them itself, but only as root-owned
@@ -24,8 +26,8 @@
     src: "{{ item }}.j2"
     dest: "{{ ipseis_app_dir }}/{{ item }}"
     owner: root
-    group: root
-    mode: "0600"
+    group: "{{ ipseis_deploy_group }}"
+    mode: "0640"
   loop: >-
     {{ [ipseis_db_env_file, ipseis_api_env_file]
        + ([ipseis_db_dev_env_file, ipseis_api_dev_env_file] if ipseis_dev_enabled else []) }}
@@ -36,7 +38,7 @@
     src: docker-compose.yml.j2
     dest: "{{ ipseis_app_dir }}/docker-compose.yml"
     owner: root
-    group: root
+    group: "{{ ipseis_deploy_group }}"
     mode: "0640"
 
 - name: Pull images

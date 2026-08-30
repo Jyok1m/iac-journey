@@ -3,7 +3,13 @@
 ipseis_app_name: ipseis
 ipseis_app_dir: /opt/{{ ipseis_app_name }}
 
-# Second copy of the stack on :dev images, pointed at the Vercel preview front.
+# Host group allowed to read the stack directory. Jenkins deploys this app over
+# SSH and shells out to `docker compose` from that account, so it needs to
+# traverse the directory and read the compose and env files — group read is what
+# keeps the secrets off 0644 while still letting the pipeline run.
+ipseis_deploy_group: jenkins
+
+# Second copy of the whole stack — database, API and front — on :dev images.
 # Set to false to stop rendering and deploying it.
 ipseis_dev_enabled: true
 
@@ -32,18 +38,50 @@ ipseis_api_dev_image: jyok1m/ipseis-backend:dev
 ipseis_api_dev_container_name: ipseis-api-dev
 ipseis_api_dev_env_file: ipseis-api-dev.env
 
+# Service Web (Next.js front, moved off Vercel onto this host)
+ipseis_web_image: jyok1m/ipseis-frontend:latest
+ipseis_web_container_name: ipseis-web
+# A standalone Next server idles around 100 MB; the ceiling is there for the
+# SSR bursts, and the heap stays under it so V8 aborts with a JS stack trace
+# instead of being SIGKILLed.
+ipseis_web_memory: 512M
+ipseis_web_heap_mb: 384
+ipseis_web_dev_image: jyok1m/ipseis-frontend:dev
+ipseis_web_dev_container_name: ipseis-web-dev
+# Rewrites every route to /maintenance with a 503 (src/proxy.ts). Read at
+# runtime, so flipping it and re-running the role is enough — no rebuild.
+ipseis_web_maintenance: false
+ipseis_web_dev_maintenance: false
+
 # Application config
-ipseis_frontend_url: https://ipseis.fr
-ipseis_dev_frontend_url: https://ipseis-git-dev-joachim-jasmins-projects.vercel.app
+# Canonical origin of the front. Also what the API puts in the links it mails
+# out (password reset, registration), so it has to be the name users can open.
+ipseis_frontend_url: https://{{ ipseis_web_host }}
+ipseis_dev_frontend_url: https://{{ ipseis_web_dev_host }}
 ipseis_nodemailer_email: ipseis.ne.pas.repondre@gmail.com
-ipseis_mail_to: helenedm@ipseis.fr
+# ipseis_mail_to: helenedm@ipseis.fr
+ipseis_mail_to: hdemontabert@yahoo.fr
 ipseis_dev_mail_to: joachim.jasmin-dev@proton.me
 
-# Routing — the canonical host is the .fr, the .com permanently redirects to it.
-ipseis_api_host: ipseis-backend.{{ portfolio_domain_fr }}
-ipseis_api_redirect_host: ipseis-backend.{{ portfolio_domain_com }}
-ipseis_api_dev_host: ipseis-backend-dev.{{ portfolio_domain_fr }}
-ipseis_api_dev_redirect_host: ipseis-backend-dev.{{ portfolio_domain_com }}
+# Routing — the front is the only public face of the stack. The API used to
+# answer on ipseis-backend.<domain>; nothing calls it there any more, so the
+# router is gone and only the WebSocket below stays exposed.
+#
+# Front — canonical on the .eu, the one zone terraform points at this host.
+# ipseis.fr is in the API's CORS list but is not a delegated domain at all (no
+# NS, no A), and Traefik answers the ACME challenge over HTTP-01: a router for
+# a name that does not resolve here would fail issuance in a loop. Add
+# Host(`ipseis.fr`) to the alias router the day the zone exists, not before.
+ipseis_web_host: ipseis.eu
+ipseis_web_router: Host(`{{ ipseis_web_host }}`)
+ipseis_web_alias_router: Host(`www.{{ ipseis_web_host }}`)
+ipseis_web_dev_host: dev.{{ ipseis_web_host }}
+ipseis_web_dev_router: Host(`{{ ipseis_web_dev_host }}`)
+
+# WebSocket — served under the front's own domain but routed to the API, see
+# the labels on ipseis-api for why it cannot live on the API's own host.
+ipseis_ws_router: Host(`{{ ipseis_web_host }}`) && PathPrefix(`/socket.io`)
+ipseis_ws_dev_router: Host(`{{ ipseis_web_dev_host }}`) && PathPrefix(`/socket.io`)
 
 # Backups — restic repository holding the Mongo dumps.
 ipseis_backup_restic_repo: s3:https://s3.gra.io.cloud.ovh.net/{{ ipseis_app_name }}
