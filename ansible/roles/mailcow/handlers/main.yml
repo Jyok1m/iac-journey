@@ -29,6 +29,22 @@
     wait: true
     wait_timeout: 180
 
+# SOGo enumerates the mail domains from the database ONCE, in
+# bootstrap-sogo.sh at container start, and writes one SOGoUserSources block
+# per domain into /etc/sogo/sogo.conf. A domain created after that start is
+# invisible to it until it is restarted — every mailbox in that domain
+# authenticates fine against mailcow and then gets "Unauthorized" from the
+# webmail, while IMAP and SMTP keep working because Dovecot and Postfix read
+# the database live. Nothing in the stack restarts SOGo on its own.
+- name: Restart sogo
+  community.docker.docker_compose_v2:
+    project_src: "{{ mailcow_app_dir }}"
+    services:
+      - sogo-mailcow
+    state: restarted
+    wait: true
+    wait_timeout: 180
+
 - name: Restart dovecot
   community.docker.docker_compose_v2:
     project_src: "{{ mailcow_app_dir }}"

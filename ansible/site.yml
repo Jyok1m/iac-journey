@@ -70,6 +70,7 @@
   vars_files:
     - vaults/heirloom.yml
     - vaults/n8n.yml
+    - vaults/odyssai.yml
   roles:
     - {role: heirloom, tags: [heirloom]}
     - {role: odyssai, tags: [odyssai]}

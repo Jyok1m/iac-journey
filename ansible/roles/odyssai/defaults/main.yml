@@ -64,6 +64,35 @@ odyssai_api_router: Host(`{{ odyssai_api_host }}`)
 odyssai_api_dev_host: api-dev.{{ odyssai_domain }}
 odyssai_api_dev_router: Host(`{{ odyssai_api_dev_host }}`)
 
+# Redis — session store for the API. One instance per copy of the stack: the
+# dev copy must not be able to read, or evict, production sessions.
+# Pinned by digest like the other third-party images in this inventory.
+odyssai_redis_image: redis:8-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576
+odyssai_redis_container_name: odyssai-redis
+odyssai_redis_dev_container_name: odyssai-redis-dev
+odyssai_redis_port: 6379
+# Sessions are small and all carry a TTL. The ceiling is there so a leak cannot
+# starve the host, and volatile-ttl evicts what expires soonest rather than
+# refusing writes.
+odyssai_redis_memory: 256M
+odyssai_redis_maxmemory: 192mb
+odyssai_redis_conf_file: redis.conf
+odyssai_redis_dev_conf_file: redis-dev.conf
+
+# Keycloak — one realm per environment, both on the SSO host installed by the
+# keycloak role. The API is the only client and it is confidential; the secret
+# lives in vaults/odyssai.yml.
+odyssai_keycloak_url: https://sso.{{ portfolio_domain_com }}
+odyssai_keycloak_realm: odyssai-prod
+odyssai_keycloak_dev_realm: odyssai-dev
+odyssai_keycloak_client_id: odyssai-api
+
+# Env files. Everything the API reads that is either a secret or an origin it
+# cannot guess. NODE_ENV, PORT and the heap ceiling stay in the compose file:
+# they describe the container, not the application.
+odyssai_api_env_file: odyssai-api.env
+odyssai_api_dev_env_file: odyssai-api-dev.env
+
 # Canonical origin of the front — canonical tags, hreflang, OpenGraph, sitemap
 # and robots. The pipeline already bakes it into the image (the locale routes
 # are prerendered), but src/lib/seo.ts reads it at runtime for everything that

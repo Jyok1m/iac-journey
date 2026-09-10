@@ -1,39 +1,40 @@
 ---
-# The second DNS pass, and the reason the DNS work is split in two. The DKIM
-# key does not exist until mailcow has generated it for the domain, which
-# cannot happen before the stack is running — so it cannot be part of the
-# pass that has to precede the stack coming up.
+# The second DNS pass, and the reason the DNS work is split in two. A DKIM key
+# does not exist until mailcow has generated it for the domain, which cannot
+# happen before the stack is running — so it cannot be part of the pass that
+# has to precede the stack coming up.
 #
-# tf_vars.yml re-reads the current state rather than assuming this pass is
-# the one that introduces the key, which is what lets the same include run on
-# a steady-state re-run and plan nothing.
+# tf_vars.yml re-reads the current state rather than assuming this pass is the
+# one that introduces the keys, which is what lets the same include run on a
+# steady-state re-run and plan nothing.
 
 - name: Re-read what terraform can know now that mailcow is up
   ansible.builtin.import_tasks: tf_vars.yml
 
-- name: Assert mailcow has generated a DKIM key
+- name: Assert mailcow has generated a DKIM key for every domain
   ansible.builtin.assert:
     that:
-      - mailcow_dkim_txt | length > 0
+      - mailcow_dkim[item] | default('') | length > 0
     fail_msg: >-
-      mailcow has no DKIM key for {{ mailcow_domain }}. The domain was created
-      with dkim_selector={{ mailcow_dkim_selector }}, so this means the
-      generation failed. Check
-      `curl -H "X-API-Key: ..." {{ mailcow_api_url }}/api/v1/get/dkim/{{ mailcow_domain }}`.
+      mailcow has no DKIM key for {{ item }}. The domain was created with
+      dkim_selector={{ mailcow_dkim_selector }}, so this means the generation
+      failed. Check
+      `curl -H "X-API-Key: ..." {{ mailcow_api_url }}/api/v1/get/dkim/{{ item }}`.
     quiet: true
+  loop: "{{ mailcow_domain_names }}"
 
-- name: Publish the DKIM record
+- name: Publish the DKIM records
   ansible.builtin.include_tasks: terraform_apply.yml
   vars:
     mailcow_tf_purpose: DKIM and MTA-STS
 
-- name: Wait for the DKIM record to resolve
+- name: Wait for the DKIM records to resolve
   ansible.builtin.command:
     argv:
       - dig
       - +short
-      - "@{{ item }}"
-      - "{{ mailcow_dkim_selector }}._domainkey.{{ mailcow_domain }}"
+      - "@{{ item.0 }}"
+      - "{{ mailcow_dkim_selector }}._domainkey.{{ item.1 }}"
       - TXT
   delegate_to: localhost
   # A task-level `become: false` does not override ansible_become for a
@@ -46,29 +47,32 @@
   until: "'v=DKIM1' in mailcow_dkim_dns.stdout"
   retries: "{{ mailcow_dns_propagation_retries }}"
   delay: "{{ mailcow_dns_propagation_delay }}"
-  loop: "{{ mailcow_dns_resolvers }}"
+  loop: "{{ mailcow_dns_resolvers | product(mailcow_domain_names) | list }}"
   loop_control:
-    label: "@{{ item }}"
+    label: "{{ item.1 }} @{{ item.0 }}"
 
 # mailcow signs with the key it holds; DNS advertises the key terraform
-# published. If a rebuild regenerated the key without the DNS pass running,
-# every signature would fail to verify while looking perfectly configured.
-# Both sides are normalised the same way before comparing. A 2048-bit key is
-# split across several quoted character-strings, and dig re-quotes them on the
-# way out, so the quoting differs on each side while the key does not.
-- name: Normalise both copies of the key for comparison
-  ansible.builtin.set_fact:
-    mailcow_dkim_local: "{{ mailcow_dkim_txt | regex_replace('[\" ]', '') }}"
-    mailcow_dkim_published: "{{ mailcow_dkim_dns.results | map(attribute='stdout') | join(' ') | regex_replace('[\" ]', '') }}"
-
-- name: Confirm the published key is the one mailcow signs with
+# published. If a rebuild regenerated a key without the DNS pass running, every
+# signature for that domain would fail to verify while looking perfectly
+# configured — and with three domains sharing one selector, the one that broke
+# would not be obvious. Both sides are normalised the same way before
+# comparing: a 2048-bit key is split across several quoted character-strings,
+# and dig re-quotes them on the way out, so the quoting differs on each side
+# while the key does not.
+- name: Confirm each published key is the one mailcow signs with
   ansible.builtin.assert:
     that:
-      - mailcow_dkim_local | length > 0
-      - mailcow_dkim_local in mailcow_dkim_published
+      - mailcow_dkim[item.item.1] | regex_replace('[" ]', '') | length > 0
+      - (mailcow_dkim[item.item.1] | regex_replace('[" ]', ''))
+        in (item.stdout | regex_replace('[" ]', ''))
     fail_msg: >-
-      The DKIM record in DNS is not the key mailcow signs with. Signatures
-      would fail to verify while the configuration looked correct.
-      mailcow holds ...{{ mailcow_dkim_local[-24:] | default('') }},
-      DNS publishes ...{{ mailcow_dkim_published[-24:] | default('') }}.
+      The DKIM record published for {{ item.item.1 }} is not the key mailcow
+      signs with. Signatures would fail to verify while the configuration
+      looked correct. mailcow holds
+      ...{{ (mailcow_dkim[item.item.1] | regex_replace('[" ]', ''))[-24:] }},
+      {{ item.item.0 }} returns
+      ...{{ (item.stdout | regex_replace('[" ]', ''))[-24:] }}.
     quiet: true
+  loop: "{{ mailcow_dkim_dns.results }}"
+  loop_control:
+    label: "{{ item.item.1 }} @{{ item.item.0 }}"

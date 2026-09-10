@@ -41,6 +41,8 @@ services:
     restart: unless-stopped
     command: start
     env_file: {{ keycloak_env_file }}
+    volumes:
+      - ./themes:/opt/keycloak/themes:ro
     deploy:
       resources:
         limits:

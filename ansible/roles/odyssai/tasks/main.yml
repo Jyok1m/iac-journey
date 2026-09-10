@@ -7,11 +7,47 @@
     group: "{{ odyssai_deploy_group }}"
     mode: "0750"
 
-# No env file yet, and none rendered on purpose: the API is still the bare Nest
-# scaffold and reads nothing but PORT, which the image sets. The two runtime
-# values the stack does need — SITE_URL and the heap ceilings — are not secrets
-# and live in the compose file. Add a vault under vaults/ and a template here
-# the day Postgres, Redis or the LLM keys land.
+# 0600 and root-owned: these carry the Keycloak client secret and the Redis
+# password. The deploy group can read the compose file, not these.
+# No handler needed: Compose resolves env_file into the service's config hash,
+# so a changed value here is already enough for `recreate: auto` to bounce the
+# container below.
+- name: Deploy env files
+  ansible.builtin.template:
+    src: odyssai-api.env.j2
+    dest: "{{ odyssai_app_dir }}/{{ item.file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ odyssai_api_env_targets }}"
+  vars:
+    api_host: "{{ item.api_host }}"
+    web_url: "{{ item.web_url }}"
+    keycloak_realm: "{{ item.keycloak_realm }}"
+    keycloak_client_secret: "{{ item.keycloak_client_secret }}"
+    redis_host: "{{ item.redis_host }}"
+    redis_password: "{{ item.redis_password }}"
+  no_log: true
+
+# Redis reads its password from this file rather than from an argument, so it
+# is a secret too and gets the same treatment. Mounted read-only by the
+# container, which runs as the redis user and only needs to read it.
+# This one does need a handler: a bind mount is opaque to Compose, so editing
+# the file changes nothing it can notice and the server would keep serving the
+# old password until something restarts it.
+- name: Deploy redis config
+  ansible.builtin.template:
+    src: redis.conf.j2
+    dest: "{{ odyssai_app_dir }}/{{ item.file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ odyssai_redis_conf_targets }}"
+  vars:
+    redis_password: "{{ item.redis_password }}"
+  no_log: true
+  notify: Restart odyssai redis
+
 - name: Deploy compose file
   ansible.builtin.template:
     src: docker-compose.yml.j2

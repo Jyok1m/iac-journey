@@ -13,3 +13,9 @@ keycloak_image: quay.io/keycloak/keycloak:26.7@sha256:0f198be292568439d700cdbfb8
 keycloak_container_name: keycloak
 keycloak_env_file: keycloak.env
 keycloak_router: Host(`sso.{{ portfolio_domain_com }}`)
+
+# Custom login themes, mounted read-only. The themes Keycloak ships with live
+# in its JARs, so this mount adds to them rather than hiding them.
+# Contents come from files/themes/ — see the README there for where the odyssai
+# theme is authored.
+keycloak_themes_dir: "{{ keycloak_app_dir }}/themes"

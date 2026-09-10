@@ -1,0 +1,39 @@
+---
+# Derived from defaults and the vault: the two copies of the stack take the
+# same templates with different realms, hosts and secrets. Kept here rather
+# than inlined in the loops so tasks/main.yml stays readable, and so the dev
+# copy disappears from every loop at once when odyssai_dev_enabled is false.
+
+odyssai_api_env_prod:
+  file: "{{ odyssai_api_env_file }}"
+  api_host: "{{ odyssai_api_host }}"
+  web_url: "{{ odyssai_site_url }}"
+  keycloak_realm: "{{ odyssai_keycloak_realm }}"
+  keycloak_client_secret: "{{ odyssai_vault_keycloak_client_secret }}"
+  redis_host: "{{ odyssai_redis_container_name }}"
+  redis_password: "{{ odyssai_vault_redis_password }}"
+
+odyssai_api_env_dev:
+  file: "{{ odyssai_api_dev_env_file }}"
+  api_host: "{{ odyssai_api_dev_host }}"
+  web_url: "{{ odyssai_dev_site_url }}"
+  keycloak_realm: "{{ odyssai_keycloak_dev_realm }}"
+  keycloak_client_secret: "{{ odyssai_vault_keycloak_dev_client_secret }}"
+  redis_host: "{{ odyssai_redis_dev_container_name }}"
+  redis_password: "{{ odyssai_vault_redis_dev_password }}"
+
+odyssai_api_env_targets: >-
+  {{ [odyssai_api_env_prod]
+     + ([odyssai_api_env_dev] if odyssai_dev_enabled | bool else []) }}
+
+odyssai_redis_conf_prod:
+  file: "{{ odyssai_redis_conf_file }}"
+  redis_password: "{{ odyssai_vault_redis_password }}"
+
+odyssai_redis_conf_dev:
+  file: "{{ odyssai_redis_dev_conf_file }}"
+  redis_password: "{{ odyssai_vault_redis_dev_password }}"
+
+odyssai_redis_conf_targets: >-
+  {{ [odyssai_redis_conf_prod]
+     + ([odyssai_redis_conf_dev] if odyssai_dev_enabled | bool else []) }}

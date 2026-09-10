@@ -1,13 +1,62 @@
 ---
 services:
+  # Session store for the API. Never on traefik-public: odyssai-internal is
+  # declared internal, so there is no route from the outside to this port at
+  # all, and the password is a second lock rather than the only one.
+  redis:
+    image: {{ odyssai_redis_image }}
+    container_name: {{ odyssai_redis_container_name }}
+    restart: unless-stopped
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./{{ odyssai_redis_conf_file }}:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: {{ odyssai_redis_memory }}
+        reservations:
+          memory: 32M
+    # Unauthenticated on purpose: a bare PING answers NOAUTH when the server is
+    # up, which is all a liveness probe needs to know. Passing the password
+    # would leave it in `docker inspect`, which is exactly what the config file
+    # avoids.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli ping 2>&1 | grep -qE 'PONG|NOAUTH'
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - odyssai-internal
+
   api:
     image: {{ odyssai_api_image }}
     container_name: {{ odyssai_api_container_name }}
     restart: unless-stopped
+    # Origins, realm and secrets. Rendered by the role, 0600, outside this
+    # file: the compose file is readable by the deploy group, these are not.
+    env_file: {{ odyssai_api_env_file }}
     environment:
       NODE_ENV: production
       PORT: "{{ odyssai_api_port }}"
       NODE_OPTIONS: --max-old-space-size={{ odyssai_api_heap_mb }}
+    # Health gate, unlike the front's: the API validates its config and opens
+    # its Redis connection at boot, so starting it before the store is up would
+    # only produce a crash loop.
+    depends_on:
+      redis:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -33,9 +82,10 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # odyssai-internal is where the front reaches it; traefik-public carries the
-    # inbound traffic and is also the container's only route out, which the LLM
-    # calls will need as soon as packages/llm is wired in.
+    # odyssai-internal is where the front reaches it and where it reaches Redis;
+    # traefik-public carries the inbound traffic and is also the container's
+    # only route out, which the LLM calls will need as soon as packages/llm is
+    # wired in — and which Keycloak already needs for the token endpoint.
     networks:
       - odyssai-internal
       - traefik-public
@@ -117,12 +167,48 @@ services:
       - traefik.http.middlewares.{{ odyssai_web_container_name }}-alias.redirectregex.regex=^https?://[^/]+/(.*)
       - traefik.http.middlewares.{{ odyssai_web_container_name }}-alias.redirectregex.replacement=https://{{ odyssai_web_host }}/$${1}
       - traefik.http.middlewares.{{ odyssai_web_container_name }}-alias.redirectregex.permanent=true
-{% if odyssai_dev_enabled %}
+{% if odyssai_dev_enabled | bool %}
+
+  # Its own store, its own password, its own network: a session opened on the
+  # dev copy must never be readable from production, nor the other way round.
+  redis-dev:
+    image: {{ odyssai_redis_image }}
+    container_name: {{ odyssai_redis_dev_container_name }}
+    restart: unless-stopped
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./{{ odyssai_redis_dev_conf_file }}:/usr/local/etc/redis/redis.conf:ro
+      - redis-dev-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: {{ odyssai_redis_memory }}
+        reservations:
+          memory: 32M
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli ping 2>&1 | grep -qE 'PONG|NOAUTH'
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - odyssai-internal-dev
 
   api-dev:
     image: {{ odyssai_api_dev_image }}
     container_name: {{ odyssai_api_dev_container_name }}
     restart: unless-stopped
+    env_file: {{ odyssai_api_dev_env_file }}
     # NODE_ENV stays production on this copy too: the container runs the same
     # compiled build either way, and development would only change how Nest
     # reports errors while diverging from what production actually runs.
@@ -130,6 +216,9 @@ services:
       NODE_ENV: production
       PORT: "{{ odyssai_api_port }}"
       NODE_OPTIONS: --max-old-space-size={{ odyssai_api_heap_mb }}
+    depends_on:
+      redis-dev:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -215,6 +304,17 @@ services:
       - traefik.http.services.{{ odyssai_web_dev_container_name }}.loadbalancer.server.port={{ odyssai_web_port }}
 {% endif %}
 
+# Named rather than bound to a host path: the data is Redis's own format and
+# nothing outside the container has any business reading it. Sessions have to
+# survive a redeploy, so they cannot live in the container layer.
+volumes:
+  redis-data:
+    name: {{ odyssai_app_name }}-redis-data
+{% if odyssai_dev_enabled | bool %}
+  redis-dev-data:
+    name: {{ odyssai_app_name }}-redis-dev-data
+{% endif %}
+
 # Compose stamps every network it creates with the key used to declare it and
 # then refuses to touch one whose stamp no longer matches, so these keys are
 # fixed for the life of the stack — renaming one strands the running network.
@@ -225,7 +325,7 @@ networks:
   traefik-public:
     name: traefik-public
     external: true
-{% if odyssai_dev_enabled %}
+{% if odyssai_dev_enabled | bool %}
   odyssai-internal-dev:
     name: {{ odyssai_app_name }}-internal-dev
     internal: true

@@ -14,8 +14,10 @@
   vars_files:
     - vaults/mailcow.yml
   vars:
+    # The vault map is keyed by the full address, not by the local part —
+    # no-reply exists on more than one domain. Overriding mail_test_from with
+    # -e is enough to test any mailbox; nothing else here names the local part.
     mail_test_from: "info@{{ portfolio_domain_com }}"
-    mail_test_local: info
   tasks:
     - name: Require a destination
       ansible.builtin.assert:
@@ -38,7 +40,7 @@
           ansible.builtin.copy:
             content: |
               {{ mail_test_from }}
-              {{ mailcow_vault_mailboxes[mail_test_local] }}
+              {{ mailcow_vault_mailboxes[mail_test_from] }}
               {{ mail_test_to }}
             dest: /root/.mailtest.creds
             owner: root

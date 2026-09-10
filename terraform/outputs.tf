@@ -1,28 +1,32 @@
-# The DS record the registrar needs. Cloudflare signs the zone as soon as
-# cloudflare_zone_dnssec is active, but the chain of trust only closes once
-# this value is published at the registrar, which no credential in this repo
-# can reach. The role's verify step reads the DS out of live DNS and, if it is
-# missing, prints the command below rather than letting the DNSSEC-dependent
-# checks quietly score zero.
+# The DS record each registrar needs, keyed by zone. Cloudflare signs a zone as
+# soon as its cloudflare_zone_dnssec is active, but the chain of trust only
+# closes once this value is published at the registrar, which no credential in
+# this repo can reach — the three mail zones are hosted at Cloudflare and
+# registered elsewhere. The role's verify step reads each DS out of live DNS
+# and, where it is missing, prints the value rather than letting the
+# DNSSEC-dependent checks quietly score zero.
 output "mail_dnssec_ds" {
-  description = "DS record to publish at the registrar for the mail domain."
-  value       = var.mail_dnssec_enabled ? one(cloudflare_zone_dnssec.mail[*].ds) : null
+  description = "DS record to publish at the registrar, per signed mail zone."
+  value       = { for d, z in cloudflare_zone_dnssec.mail : d => z.ds }
 }
 
 output "mail_dnssec_status" {
-  description = "Cloudflare-side DNSSEC status for the mail zone."
-  value       = var.mail_dnssec_enabled ? one(cloudflare_zone_dnssec.mail[*].status) : "disabled"
+  description = "Cloudflare-side DNSSEC status per mail zone. Zones absent from mail_dnssec_domains are reported as disabled rather than omitted."
+  value = merge(
+    { for d in keys(var.mail_domains) : d => "disabled" },
+    { for d, z in cloudflare_zone_dnssec.mail : d => z.status },
+  )
 }
 
 output "mail_dnssec_digest" {
-  description = "Digest, key tag, algorithm and digest type, for registrars that ask for the DS in parts rather than as one string."
-  value = var.mail_dnssec_enabled ? {
-    key_tag          = one(cloudflare_zone_dnssec.mail[*].key_tag)
-    algorithm        = one(cloudflare_zone_dnssec.mail[*].algorithm)
-    digest_type      = one(cloudflare_zone_dnssec.mail[*].digest_type)
-    digest           = one(cloudflare_zone_dnssec.mail[*].digest)
-    digest_algorithm = one(cloudflare_zone_dnssec.mail[*].digest_algorithm)
-  } : null
+  description = "Digest, key tag, algorithm and digest type per signed zone, for registrars that ask for the DS in parts rather than as one string."
+  value = { for d, z in cloudflare_zone_dnssec.mail : d => {
+    key_tag          = z.key_tag
+    algorithm        = z.algorithm
+    digest_type      = z.digest_type
+    digest           = z.digest
+    digest_algorithm = z.digest_algorithm
+  } }
 }
 
 # Everything the mail setup published, so a run can diff what it believes it

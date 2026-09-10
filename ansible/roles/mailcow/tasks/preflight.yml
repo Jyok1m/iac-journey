@@ -33,6 +33,77 @@
       key with other characters authenticates as nothing.
     quiet: true
 
+# Keyed by the full address, not by the local part. no-reply exists on two
+# domains here, and a local-part map would have handed them the same password
+# without anyone noticing until one of the two apps could send as the other.
+- name: Assert every mailbox has a password in the vault
+  ansible.builtin.assert:
+    that:
+      - item.address in (mailcow_vault_mailboxes | default({}))
+    fail_msg: >-
+      mailcow_vault_mailboxes has no entry for {{ item.address }}. The map is
+      keyed by the full address — an entry keyed on the local part alone is
+      ignored. Add it with `ansible-vault edit ansible/vaults/mailcow.yml`.
+    quiet: true
+  loop: "{{ mailcow_mailboxes }}"
+  loop_control:
+    label: "{{ item.address }}"
+
+- name: Assert no address is declared twice
+  ansible.builtin.assert:
+    that:
+      - mailcow_mailboxes | map(attribute='address') | list | length ==
+        mailcow_mailboxes | map(attribute='address') | unique | list | length
+      - mailcow_aliases | map(attribute='address') | list | length ==
+        mailcow_aliases | map(attribute='address') | unique | list | length
+      - mailcow_mailboxes | map(attribute='address') | select('in', mailcow_aliases | map(attribute='address') | list) | list | length == 0
+    fail_msg: >-
+      An address appears twice across mailcow_mailboxes and mailcow_aliases.
+      mailcow accepts the first and rejects the second with a 200 and a
+      "already exists" message, so the run would report success while one of
+      the two silently did not exist.
+    quiet: true
+
+- name: Assert the hostname's own zone is one of the mail domains
+  ansible.builtin.assert:
+    that:
+      - mailcow_domain in mailcow_domain_names
+    fail_msg: >-
+      mailcow_domain ({{ mailcow_domain }}) is not in mailcow_domains. The
+      hostname's A/AAAA and the report mailboxes live in that zone, so it has
+      to be a domain mailcow serves.
+    quiet: true
+
+# Ansible provisions the domains inside mailcow; terraform publishes their DNS.
+# The two lists are written down separately — there is no shared source a
+# terraform tfvars file and an ansible role can both read — so they are
+# compared instead. A domain in one and not the other fails in a way that
+# looks like a working deployment: mailboxes whose mail has no MX, or an MX
+# for a domain mailcow rejects at RCPT TO, which turns this host into a
+# backscatter source.
+- name: Read the terraform mail inputs
+  ansible.builtin.set_fact:
+    mailcow_tf_domains: >-
+      {{ lookup('ansible.builtin.file', mailcow_terraform_dir ~ '/mail.auto.tfvars')
+         | regex_findall('"([^"]+)"\s*=\s*\{') }}
+  delegate_to: localhost
+  # A task-level `become: false` does not override ansible_become for a
+  # delegated task — the variable wins. This has to be set as a var.
+  vars:
+    ansible_become: false
+  run_once: true
+
+- name: Assert ansible and terraform agree on the mail domains
+  ansible.builtin.assert:
+    that:
+      - mailcow_tf_domains | sort == mailcow_domain_names | sort
+    fail_msg: >-
+      mailcow_domains lists {{ mailcow_domain_names | sort | join(', ') }},
+      but mail_domains in {{ mailcow_terraform_dir }}/mail.auto.tfvars lists
+      {{ mailcow_tf_domains | sort | join(', ') }}. Both have to name the same
+      domains.
+    quiet: true
+
 - name: Collect the container engine state
   ansible.builtin.command:
     cmd: docker info --format {{ '{{.Swarm.LocalNodeState}}' }}
@@ -94,6 +165,57 @@
     fail_msg: >-
       Docker network '{{ mailcow_traefik_network }}' does not exist. Run the
       traefik role before this one.
+    quiet: true
+
+# Docker only reports an overlapping pool at network-create time, and it does
+# it as "invalid pool request: Pool overlaps with other one on this address
+# space" from inside a compose run that has already started doing work. The
+# message names neither the subnet asked for nor the network holding it.
+#
+# This is not a theoretical failure. Docker's built-in default address pool is
+# 172.17.0.0/16 through 172.31.0.0/16, one whole /16 per network, so a host
+# carrying a stack per application runs out — and a value that was free the day
+# it was written gets taken by the next role that lands. Naming the culprit up
+# front turns a twenty-minute dig into one line.
+- name: Look for a docker network overlapping the pool mailcow wants
+  ansible.builtin.shell:
+    # bash, not the default sh: dash has no pipefail, and without it a docker
+    # that failed would be read as "no overlap" by the python on the far side.
+    executable: /bin/bash
+    cmd: |
+      set -o pipefail
+      { docker network inspect $(docker network ls -q) 2>/dev/null || echo '[]'; } | python3 -c '
+      import ipaddress, json, sys
+      want = ipaddress.ip_network("{{ mailcow_ipv4_network }}.0/24")
+      clash = []
+      for n in json.load(sys.stdin):
+          if n.get("Name") == "{{ mailcow_compose_project }}_mailcow-network":
+              continue
+          for c in (n.get("IPAM") or {}).get("Config") or []:
+              subnet = c.get("Subnet")
+              if not subnet:
+                  continue
+              try:
+                  net = ipaddress.ip_network(subnet)
+              except ValueError:
+                  continue
+              if net.version == 4 and net.overlaps(want):
+                  clash.append("%s holds %s" % (n["Name"], subnet))
+      print("; ".join(clash))'
+  register: mailcow_subnet_clash
+  changed_when: false
+  check_mode: false
+
+- name: Assert the pool mailcow wants is free
+  ansible.builtin.assert:
+    that:
+      - mailcow_subnet_clash.stdout | trim | length == 0
+    fail_msg: >-
+      mailcow asks for {{ mailcow_ipv4_network }}.0/24 and
+      {{ mailcow_subnet_clash.stdout | trim }}. Docker refuses an overlapping
+      pool, so the stack would fail halfway through `compose up`. Move
+      mailcow_ipv4_network to a free /24 — 172.16.0 sits one /16 below Docker's
+      built-in default pool, so nothing will ever be auto-assigned on top of it.
     quiet: true
 
 - name: Look for an existing mailcow deployment

@@ -19,6 +19,20 @@
     - keycloak-db.env
   no_log: true
 
+# Bind-mounted into the container, so the files only have to be readable: the
+# server never writes here. Note that copy adds and updates but does not prune,
+# so a file removed from the theme upstream has to be cleaned by hand on the
+# host — worth knowing the day a .ftl is renamed.
+- name: Deploy login themes
+  ansible.builtin.copy:
+    src: themes/
+    dest: "{{ keycloak_themes_dir }}/"
+    owner: root
+    group: root
+    mode: "0644"
+    directory_mode: "0755"
+  notify: Restart keycloak
+
 - name: Deploy compose file
   ansible.builtin.template:
     src: docker-compose.yml.j2

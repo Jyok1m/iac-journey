@@ -1,0 +1,502 @@
+/* Theme de connexion OdyssAI.
+ *
+ * Les valeurs sont reprises de apps/web/src/app/globals.css, qui porte les
+ * tokens de apps/web/odyssai-ui-kit.html. Keycloak ne compile pas Tailwind :
+ * les tokens sont donc redeclares ici en variables CSS, mais aucune valeur
+ * n'est inventee. Toute evolution du kit doit etre reportee dans ce fichier.
+ */
+
+:root {
+  --ink: #12162b;
+  --abyss: #1a2041;
+  --mist: #252c56;
+  --line: #353d6e;
+
+  --vellum: #ede6d6;
+  --vellum-2: #bbb5cb;
+  --vellum-3: #8c88a6;
+
+  --verdigris: #5fb8a5;
+  --brass: #d4a84f;
+  --ember: #e2685a;
+  --arcane: #9d8cf2;
+
+  /* Accent du monde courant. Hors du jeu, l'accent est le verdigris. */
+  --accent: var(--verdigris);
+  --on-accent: #0f1b1d;
+
+  --font-voice: "Literata", Georgia, serif;
+  --font-ui: "Instrument Sans", system-ui, sans-serif;
+
+  --r-control: 6px;
+  --r-card: 12px;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.odyssai-html {
+  height: 100%;
+}
+
+.odyssai-body {
+  height: 100%;
+  margin: 0;
+  background: var(--ink);
+  color: var(--vellum);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-voice);
+  font-weight: 500;
+  font-optical-sizing: auto;
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ layout */
+
+.odyssai-split {
+  display: flex;
+  min-height: 100%;
+}
+
+.odyssai-pane {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.odyssai-content {
+  width: 100%;
+  max-width: 24rem;
+  margin: 0 auto;
+}
+
+/* Le panneau d'ambiance disparait sous 1024px : la colonne de formulaire
+   occupe alors toute la largeur, comme dans la maquette. */
+.odyssai-cover {
+  display: none;
+  position: relative;
+  flex: 1 1 0;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% 0%, var(--mist) 0%, var(--abyss) 45%, var(--ink) 100%);
+  border-left: 1px solid var(--line);
+}
+
+@media (min-width: 1024px) {
+  .odyssai-pane {
+    flex: 0 0 auto;
+    padding: 48px 80px;
+  }
+
+  .odyssai-content {
+    width: 24rem;
+  }
+
+  .odyssai-cover {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    padding: 64px;
+  }
+}
+
+.odyssai-cover-sky {
+  display: grid;
+  place-items: center;
+}
+
+.odyssai-portal {
+  width: min(320px, 60%);
+  height: auto;
+}
+
+.odyssai-cover-quote {
+  max-width: 34ch;
+  margin: 0;
+  text-align: center;
+}
+
+.odyssai-cover-quote p {
+  margin: 0;
+  font-family: var(--font-voice);
+  font-size: 24px;
+  line-height: 1.3;
+  color: var(--vellum-2);
+}
+
+/* ---------------------------------------------------------------- en-tete */
+
+.odyssai-brand {
+  margin-bottom: 32px;
+}
+
+.odyssai-brand img {
+  display: block;
+  height: 32px;
+  width: auto;
+}
+
+.odyssai-title {
+  font-size: 36px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.odyssai-lede {
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: var(--vellum-3);
+}
+
+.odyssai-required-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--vellum-3);
+}
+
+.odyssai-required {
+  color: var(--ember);
+}
+
+.odyssai-form-header {
+  margin-bottom: 32px;
+}
+
+/* --------------------------------------------------------------- formulaire */
+
+.odyssai-form {
+  margin: 0;
+}
+
+.odyssai-field + .odyssai-field {
+  margin-top: 18px;
+}
+
+.odyssai-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--vellum);
+}
+
+.odyssai-input {
+  width: 100%;
+  height: 42px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  color: var(--vellum);
+  padding: 0 12px;
+  font: 400 15px var(--font-ui);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.odyssai-input::placeholder {
+  color: var(--vellum-3);
+}
+
+.odyssai-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.odyssai-input:disabled {
+  opacity: 0.6;
+}
+
+/* Le champ en erreur porte la couleur, jamais le seul contour : l'etat reste
+   lisible pour qui distingue mal les teintes, grace au message associe. */
+.odyssai-field--error .odyssai-input {
+  border-color: var(--ember);
+}
+
+.odyssai-error {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ember);
+}
+
+.odyssai-help {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--vellum-3);
+}
+
+.odyssai-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  font-size: 14px;
+}
+
+.odyssai-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vellum-2);
+  cursor: pointer;
+}
+
+.odyssai-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.odyssai-forgot {
+  font-weight: 500;
+}
+
+.odyssai-buttons {
+  margin-top: 24px;
+}
+
+/* ------------------------------------------------------------------ boutons */
+
+.odyssai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--r-control);
+  border: 1px solid transparent;
+  font: 500 15px var(--font-ui);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.odyssai-btn--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.odyssai-btn--primary:hover {
+  background: color-mix(in oklab, var(--accent) 82%, white);
+}
+
+.odyssai-btn--secondary {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--vellum);
+}
+
+.odyssai-btn--secondary:hover {
+  background: var(--mist);
+  border-color: var(--vellum-3);
+}
+
+.odyssai-btn--block {
+  width: 100%;
+}
+
+.odyssai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.odyssai-linkbutton {
+  margin-top: 16px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--vellum-2);
+  font: 400 14px var(--font-ui);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* -------------------------------------------------- fournisseurs d'identite */
+
+.odyssai-social-section {
+  margin-top: 40px;
+}
+
+.odyssai-separator {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  color: var(--vellum-3);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.odyssai-separator::before,
+.odyssai-separator::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+
+.odyssai-social-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.odyssai-social-list--grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.odyssai-social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--vellum);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.odyssai-social-btn:hover {
+  background: var(--mist);
+  border-color: var(--vellum-3);
+  text-decoration: none;
+}
+
+/* ----------------------------------------------------------------- alertes */
+
+.odyssai-alert {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--abyss);
+  font-size: 14px;
+}
+
+.odyssai-alert--error {
+  border-color: color-mix(in srgb, var(--ember) 45%, transparent);
+  background: color-mix(in srgb, var(--ember) 10%, transparent);
+  color: var(--ember);
+}
+
+.odyssai-alert--success {
+  border-color: color-mix(in srgb, var(--verdigris) 45%, transparent);
+  background: color-mix(in srgb, var(--verdigris) 10%, transparent);
+  color: var(--verdigris);
+}
+
+.odyssai-alert--warning {
+  border-color: color-mix(in srgb, var(--brass) 45%, transparent);
+  background: color-mix(in srgb, var(--brass) 10%, transparent);
+  color: var(--brass);
+}
+
+.odyssai-alert--info {
+  border-color: color-mix(in srgb, var(--arcane) 45%, transparent);
+  background: color-mix(in srgb, var(--arcane) 10%, transparent);
+  color: var(--arcane);
+}
+
+/* ------------------------------------------------------- blocs secondaires */
+
+.odyssai-info-area {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--vellum-2);
+}
+
+.odyssai-info-area a {
+  font-weight: 500;
+}
+
+/* Certaines pages heritees enveloppent leur contenu dans ces conteneurs
+   PatternFly : ils ne doivent rien ajouter au fil vertical. */
+.odyssai-card,
+.odyssai-content-wrapper,
+.odyssai-form-area,
+.odyssai-input-wrapper,
+.odyssai-label-wrapper,
+.odyssai-options-wrapper,
+.odyssai-feedback {
+  display: block;
+}
+
+/* -------------------------------------------------------------- langue */
+
+.odyssai-locale {
+  margin-bottom: 24px;
+}
+
+.odyssai-locale-list {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.odyssai-locale-link {
+  color: var(--vellum-3);
+}
+
+.odyssai-locale-link[aria-current="true"] {
+  color: var(--vellum);
+  font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

@@ -157,9 +157,34 @@
   loop_control:
     label: "{{ item.item.name }}"
 
-- name: Read the DNSSEC state of the zone
+# MTA-STS is reported, never asserted. This mailcow build answers 404 on
+# /.well-known/mta-sts.txt for every domain, so the gate in tf_vars.yml never
+# flips and the _mta-sts TXT is never published — which is the correct outcome:
+# announcing a policy nobody serves makes every sender fetch a 404 and file a
+# TLS-RPT failure against us. The CNAMEs and their certificates stay in place
+# so that the day upstream serves the policy, flipping it on is one run.
+#
+# Guarded on the fact being defined at all, because `--tags mailcow-verify`
+# alone never runs tf_vars.yml.
+- name: Report the MTA-STS state
+  ansible.builtin.debug:
+    msg: >-
+      MTA-STS is not announced for
+      {{ mailcow_mta_sts_off | join(', ') }} — mailcow answers 404 on
+      /.well-known/mta-sts.txt, so the policy is deliberately left
+      unpublished rather than pointing senders at a missing document.
+      Nothing to fix here; re-check after a mailcow version bump.
+  vars:
+    mailcow_mta_sts_off: >-
+      {{ (mailcow_mta_sts_serving | default({}))
+         | dict2items | rejectattr('value') | map(attribute='key') | list }}
+  when:
+    - mailcow_mta_sts_serving is defined
+    - mailcow_mta_sts_off | length > 0
+
+- name: Read the DNSSEC state of every mail zone
   ansible.builtin.command:
-    argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", "{{ mailcow_domain }}", DS]
+    argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", "{{ item }}", DS]
   delegate_to: localhost
   # A task-level `become: false` does not override ansible_become for a
   # delegated task — the variable wins. This has to be set as a var.
@@ -168,21 +193,45 @@
   run_once: true
   register: mailcow_ds
   changed_when: false
+  loop: "{{ mailcow_domain_names }}"
+
+- name: Split the mail zones by whether they are signed
+  ansible.builtin.set_fact:
+    mailcow_zones_signed: >-
+      {{ mailcow_ds.results | selectattr('stdout', 'truthy') | map(attribute='item') | list }}
+    mailcow_zones_unsigned: >-
+      {{ mailcow_ds.results | rejectattr('stdout', 'truthy') | map(attribute='item') | list }}
 
 # Not fatal — the mail server works unsigned. But DANE is impossible without
 # it and internet.nl scores DNSSEC as a full fifth of the total, so a silent
 # pass here would misrepresent how finished this is.
-- name: Report that the zone is still unsigned
+#
+# Two separate reasons a zone lands in this list, and they need different
+# actions: it may not be in mail_dnssec_domains at all, in which case
+# Cloudflare is not signing it and nothing is pending; or it is signed there
+# and only the DS is missing at the registrar. `terraform output` tells the
+# two apart — a zone absent from the output is the first case.
+- name: Report the zones that are still unsigned
   ansible.builtin.debug:
     msg: |
-      The zone has no DS record, so DNSSEC is incomplete and DANE cannot be
-      published. Cloudflare is signing already; the DS has to be entered at
-      the registrar, which no credential in this repo can reach:
+      No DS record for: {{ mailcow_zones_unsigned | join(', ') }}.
+      DNSSEC is incomplete for those zones and DANE cannot be published there.
+
+      Which of the two cases each one is:
+
+        terraform -chdir={{ mailcow_terraform_dir }} output mail_dnssec_status
+
+      A zone reported "disabled" is not listed in mail_dnssec_domains in
+      mail.auto.tfvars — add it there first. A zone reported "pending" is
+      already being signed by Cloudflare and only needs its DS pasted at its
+      own registrar, which no credential in this repo can reach:
 
         terraform -chdir={{ mailcow_terraform_dir }} output mail_dnssec_ds
 
-      Paste that at domains.squarespace.com > {{ mailcow_domain }} > DNS > DNSSEC.
-  when: mailcow_ds.stdout | trim | length == 0
+      These three zones are registered in three different places — check each
+      one's registrar rather than assuming, and paste the DS under its DNSSEC
+      section.
+  when: mailcow_zones_unsigned | length > 0
 
 - name: Split the TLS ports by whether they could be checked from here
   ansible.builtin.set_fact:
@@ -196,5 +245,8 @@
       - "SMTP        {{ mailcow_banner.stdout | trim }}"
       - "TLS         trusted cert for {{ mailcow_hostname }} on {{ mailcow_tls_ok | join(', ') }}"
       - "TLS         unchecked from the control node: {{ mailcow_tls_unchecked | join(', ') | default('none', true) }}"
-      - "DNSSEC      {{ 'signed' if mailcow_ds.stdout | trim | length > 0 else 'UNSIGNED — DS not at the registrar' }}"
+      - "DOMAINS     {{ mailcow_domain_names | join(', ') }}"
+      - "MAILBOXES   {{ mailcow_mailboxes | map(attribute='address') | join(', ') }}"
+      - "DNSSEC      signed: {{ mailcow_zones_signed | join(', ') | default('none', true) }}"
+      - "DNSSEC      unsigned: {{ mailcow_zones_unsigned | join(', ') | default('none', true) }}"
       - "SSO         UI via Keycloak; SOGo via the UI session; IMAP/SMTP by app password, not Keycloak"

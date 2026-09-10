@@ -1,0 +1,12 @@
+---
+# In `start` mode Keycloak caches themes, so an edited .ftl or stylesheet is
+# not picked up until the server restarts. The mount itself is a bind, which
+# Compose cannot see changing — hence a handler rather than `recreate: auto`.
+- name: Restart keycloak
+  community.docker.docker_compose_v2:
+    project_src: "{{ keycloak_app_dir }}"
+    services:
+      - keycloak
+    state: restarted
+    wait: true
+    wait_timeout: 300

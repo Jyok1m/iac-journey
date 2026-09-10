@@ -14,17 +14,40 @@ mailcow_version: 2026-07a
 # (postfix myhostname), the PTR target, the CN of the certificate served on
 # 25/465/587, and the web UI host. mailcow's docs require it to be a FQDN
 # that is not the mail domain itself, hence the subdomain.
+#
+# It is NOT per-domain. One host serves every domain below, so adding a domain
+# adds no hostname, no address, no certificate and no reverse record — only
+# the records a receiver checks against the envelope sender.
 mailcow_hostname: mail.{{ portfolio_domain_com }}
+# The zone mailcow_hostname itself lives in, and the one the report mailboxes
+# live in. Must appear in mailcow_domains.
 mailcow_domain: "{{ portfolio_domain_com }}"
 mailcow_timezone: Europe/Paris
 
-# Names Traefik routes to mailcow besides the hostname. mailcow's nginx
-# answers with the wrong site for a server_name it does not know, so every
-# one of these has to appear in ADDITIONAL_SERVER_NAMES too.
-mailcow_additional_server_names:
-  - autodiscover.{{ mailcow_domain }}
-  - autoconfig.{{ mailcow_domain }}
-  - mta-sts.{{ mailcow_domain }}
+# Every domain mailcow sends and receives for. Mirrors mail_domains in
+# terraform/mail.auto.tfvars, and preflight refuses to run if the two disagree:
+# a domain here but not there gets mailboxes nobody can deliver to, and a
+# domain there but not here publishes an MX for a domain mailcow rejects at
+# RCPT TO — which is a backscatter source, not just a dead end.
+#
+# client_autoconfig publishes autodiscover/autoconfig and makes Traefik hold a
+# certificate for both names. Worth it for a domain whose mailboxes are opened
+# in a mail client; pure cost for one that only ever sends from no-reply.
+# mta_sts is independent of it: that one is about how other MTAs deliver to
+# us, not about how our own clients connect.
+mailcow_domains:
+  - name: "{{ portfolio_domain_com }}"
+    client_autoconfig: true
+    mta_sts: true
+  # helenedm@ is a human mailbox, read in a real client.
+  - name: ipseis.eu
+    client_autoconfig: true
+    mta_sts: true
+  # no-reply@ only, sent by the app. Nothing here is ever opened in a mail
+  # client, so autodiscover/autoconfig would be dead names on a certificate.
+  - name: odyssai.app
+    client_autoconfig: false
+    mta_sts: true
 
 # ------------------------------ Networking ---------------------------- #
 # Traefik owns host ports 80 and 443, so mailcow's nginx binds high ports on
@@ -50,14 +73,29 @@ mailcow_router_rule: >-
      | map('regex_replace', '^(.*)$', 'Host(`\1`)') | join(' || ') }}
 
 # mailcow's own bridge. Upstream writes this as a three-octet prefix, not a
-# CIDR, and appends the host part itself.
+# CIDR, and appends the host part itself — the compose file builds
+# ${IPV4_NETWORK}.0/24 out of it.
 #
-# Moved off upstream's 172.22.1 default: monitoring-internal already holds
-# 172.22.0.0/16 on this host, and Docker refuses an overlapping pool outright.
-# 172.21.0.0/16 is the one gap left between ipseis-internal (172.20) and
-# monitoring (172.22); 172.31 is the only other. Changing this moves the
-# gateway address, which has to stay in step with mailcow_api_allow_from.
-mailcow_ipv4_network: 172.21.0
+# 172.16.0, deliberately, and NOT anything in 172.17–172.31: Docker's built-in
+# default address pool is exactly that range, one /16 per network, and this
+# host has used all fifteen. Every stack here takes a whole /16 for a handful
+# of containers, so there is no gap left to move into — the earlier value of
+# 172.21.0 was free when it was chosen and was taken by odyssai-internal
+# afterwards, which is how the deploy failed with "pool overlaps with other one
+# on this address space".
+#
+# 172.16.0.0/16 sits one /16 BELOW the default pool. The daemon will never
+# auto-assign out of it, so no future stack can take it the way odyssai took
+# 172.21 — and only the /24 below is actually claimed. Verified free on this
+# host: no route, no bridge, and the vRack is on 10.42.0.0/24.
+#
+# The durable fix is a `default-address-pools` of /24s in
+# /etc/docker/daemon.json, but that needs a daemon restart, which would bounce
+# all nine other stacks. Same reason ENABLE_IPV6 stays off.
+#
+# Changing this moves the gateway address, which mailcow_api_allow_from derives
+# rather than repeats — so the two cannot drift.
+mailcow_ipv4_network: 172.16.0
 mailcow_ipv6_network: "fd4d:6169:6c63:6f77::/64"
 
 # 125 GiB on this host, so nothing is trimmed for memory. ClamAV and the
@@ -100,19 +138,44 @@ mailcow_traefik_acme_resolver: letsencrypt
 mailcow_cert_sync_unit: mailcow-certsync
 
 # ------------------------------ Mailboxes ------------------------------ #
-# Passwords come from mailcow_vault_mailboxes, keyed by the local part.
+# Passwords come from mailcow_vault_mailboxes, keyed by the FULL address.
+# Not by the local part: no-reply exists on two different domains here, and a
+# map keyed on the local part would have silently given them one shared
+# password — or, worse, whichever of the two the vault happened to define last.
+# preflight refuses to run unless every address below has an entry.
+#
+# These are ordinary mailboxes with their own credentials, one per address, so
+# each app authenticates on submission as itself. An app whose password leaks
+# can send as one address, not as the domain.
 mailcow_mailboxes:
-  - {local: info, name: Info, quota: 3072}
-  - {local: invoice, name: Invoice, quota: 3072}
-  - {local: dmarc, name: DMARC reports, quota: 1024}
+  # joachimjasmin.com
+  - {address: "info@{{ portfolio_domain_com }}", name: Info, quota: 3072}
+  - {address: "invoice@{{ portfolio_domain_com }}", name: Invoice, quota: 3072}
+  - {address: "dmarc@{{ portfolio_domain_com }}", name: DMARC reports, quota: 1024}
+  - {address: "newsletter@{{ portfolio_domain_com }}", name: Newsletter, quota: 2048}
+  - {address: "no-reply@{{ portfolio_domain_com }}", name: No reply, quota: 1024}
+  - {address: "alert@{{ portfolio_domain_com }}", name: Alerts, quota: 1024}
+  # ipseis.eu
+  - {address: helenedm@ipseis.eu, name: Hélène DM, quota: 5120}
+  # odyssai.app
+  - {address: no-reply@odyssai.app, name: No reply, quota: 1024}
 
-# Report destinations referenced by the DNS records. Kept as aliases rather
-# than mailboxes so the addresses in the published DMARC and TLS-RPT records
-# resolve without a second password to manage.
+# postmaster and abuse are the two addresses RFC 2142 makes mandatory, and a
+# receiver that cannot reach either treats the domain as unattended. They are
+# aliases rather than mailboxes so there is no extra password to manage, and
+# they point at an address that is actually read — which for odyssai.app means
+# crossing domains, since its only mailbox is a no-reply.
+#
+# tls-reports is the destination named in every TLS-RPT record; DMARC reports
+# for all three domains land in dmarc@ the same way.
 mailcow_aliases:
-  - {address: "postmaster@{{ mailcow_domain }}", goto: "info@{{ mailcow_domain }}"}
-  - {address: "abuse@{{ mailcow_domain }}", goto: "info@{{ mailcow_domain }}"}
-  - {address: "tls-reports@{{ mailcow_domain }}", goto: "dmarc@{{ mailcow_domain }}"}
+  - {address: "postmaster@{{ portfolio_domain_com }}", goto: "info@{{ portfolio_domain_com }}"}
+  - {address: "abuse@{{ portfolio_domain_com }}", goto: "info@{{ portfolio_domain_com }}"}
+  - {address: "tls-reports@{{ portfolio_domain_com }}", goto: "dmarc@{{ portfolio_domain_com }}"}
+  - {address: postmaster@ipseis.eu, goto: helenedm@ipseis.eu}
+  - {address: abuse@ipseis.eu, goto: helenedm@ipseis.eu}
+  - {address: postmaster@odyssai.app, goto: "info@{{ portfolio_domain_com }}"}
+  - {address: abuse@odyssai.app, goto: "info@{{ portfolio_domain_com }}"}
 
 # ------------------------------ API ------------------------------------ #
 # API_KEY is only honoured when API_ALLOW_FROM validates to a non-empty list;
@@ -159,31 +222,8 @@ mailcow_dns_resolvers:
   - 1.1.1.1
   - 8.8.8.8
 
-# Checked against a public resolver before the stack is allowed to come up.
-# Deliberately not the whole record set — these are the ones ACME and mail
-# delivery genuinely cannot start without.
-mailcow_dns_required_records:
-  - {name: "{{ mailcow_hostname }}", type: A}
-  - {name: "{{ mailcow_hostname }}", type: AAAA}
-  - {name: "{{ mailcow_domain }}", type: MX}
-  - {name: "{{ mailcow_domain }}", type: TXT}
-  - {name: "autoconfig.{{ mailcow_domain }}", type: CNAME}
-  - {name: "autodiscover.{{ mailcow_domain }}", type: CNAME}
-  - {name: "mta-sts.{{ mailcow_domain }}", type: CNAME}
-
-# Checked at the end of a run but not before it — these only exist once
-# mailcow has generated the key and started serving the policy.
-mailcow_dns_verify_extra:
-  - {name: "_dmarc.{{ mailcow_domain }}", type: TXT}
-  - {name: "{{ mailcow_dkim_selector }}._domainkey.{{ mailcow_domain }}", type: TXT}
-
-# Each of these hosts answers on a specific path, not on /. autodiscover and
-# autoconfig return 404 at the root by design, so checking / would report a
-# working deployment as broken.
-mailcow_http_checks:
-  - {host: "{{ mailcow_hostname }}", path: /, name: web UI}
-  - {host: "autoconfig.{{ mailcow_domain }}", path: "/mail/config-v1.1.xml?emailaddress=postmaster@{{ mailcow_domain }}", name: Thunderbird autoconfig}
-  - {host: "autodiscover.{{ mailcow_domain }}", path: /autodiscover/autodiscover.xml, name: Outlook autodiscover}
+# The per-domain expansion of these three lists lives in vars/main.yml — it is
+# derived from mailcow_domains, not a knob.
 
 # internet.nl only tests port 25, but a client that cannot connect on 465 or
 # 993 is broken regardless of what the score says.

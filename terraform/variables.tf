@@ -17,14 +17,48 @@ variable "portfolio_server_ip" {
 #                          Mail DNS (mailcow)                        #
 # ------------------------------------------------------------------ #
 
-variable "mail_domain" {
-  type        = string
-  description = "Zone the mailboxes live in. Must be a key of zone_ids."
-}
-
 variable "mail_hostname" {
   type        = string
-  description = "MAILCOW_HOSTNAME. Also the PTR, the SMTP HELO name and the CN of the certificate served on 25/465/587 — the three have to agree."
+  description = "MAILCOW_HOSTNAME. Also the PTR, the SMTP HELO name and the CN of the certificate served on 25/465/587 — the three have to agree. One host serves every domain below, so this name is deliberately NOT per-domain."
+}
+
+variable "mail_domain" {
+  type        = string
+  description = "The zone mail_hostname itself lives in. Its A/AAAA and the host's own SPF and DMARC land here. Must be a key of mail_domains."
+
+  validation {
+    condition     = contains(keys(var.mail_domains), var.mail_domain)
+    error_message = "mail_domain must also appear as a key of mail_domains."
+  }
+}
+
+variable "mail_domains" {
+  type = map(object({
+    # MTA-STS policy id. Must change whenever the policy body changes.
+    mta_sts_id = string
+
+    # Client autoconfiguration: the autodiscover/autoconfig CNAMEs, the SRV
+    # set and the DAV path hints. Worth publishing for a domain whose
+    # mailboxes are opened in a mail client, pure noise for a domain that only
+    # ever sends from a no-reply address.
+    client_autoconfig = optional(bool, true)
+
+    # MTA-STS: the mta-sts CNAME, and the _mta-sts TXT once mailcow actually
+    # serves the policy. Independent of client_autoconfig — this one is about
+    # how other MTAs deliver to us, not about how our own clients connect.
+    mta_sts = optional(bool, true)
+
+    # Report destinations. Both fall back to the repo-wide mailbox; override
+    # only for a domain that has to keep its own reporting.
+    dmarc_rua  = optional(string)
+    tlsrpt_rua = optional(string)
+  }))
+  description = "Every domain mailcow sends and receives for, keyed by zone name."
+
+  validation {
+    condition     = alltrue([for d in keys(var.mail_domains) : contains(keys(var.zone_ids), d)])
+    error_message = "Every key of mail_domains must also be a key of zone_ids — the records are written into that zone."
+  }
 }
 
 variable "mail_server_ipv4" {
@@ -44,14 +78,21 @@ variable "mail_server_ipv6_prefix" {
 
 variable "mail_dnssec_enabled" {
   type        = bool
-  description = "Sign the mail zone at Cloudflare. Harmless on its own — the zone stays unvalidated, and so behaves exactly as before, until the DS is published at the registrar."
+  description = "Sign the mail zones at Cloudflare. Harmless on its own — a zone stays unvalidated, and so behaves exactly as before, until its DS is published at the registrar."
   default     = true
 }
 
-variable "mail_mta_sts_enabled" {
-  type        = bool
-  description = "Announce the MTA-STS policy. Stays false until mailcow actually serves /.well-known/mta-sts.txt — announcing a policy nobody serves makes senders fetch a 404 and file TLS-RPT failures."
-  default     = false
+variable "mail_dnssec_domains" {
+  type        = set(string)
+  description = "Which mail zones to sign. null means every key of mail_domains. Signing costs nothing until the DS is published, but each zone's DS has to be pasted at its own registrar, so this exists to sign a subset."
+  default     = null
+
+  validation {
+    condition = var.mail_dnssec_domains == null || alltrue([
+      for d in coalesce(var.mail_dnssec_domains, []) : contains(keys(var.mail_domains), d)
+    ])
+    error_message = "mail_dnssec_domains may only name domains that are keys of mail_domains."
+  }
 }
 
 variable "mail_ttl" {
@@ -73,36 +114,38 @@ variable "mail_dmarc_policy" {
 
 variable "mail_dmarc_rua" {
   type        = string
-  description = "Mailbox receiving DMARC aggregate reports."
+  description = "Default mailbox receiving DMARC aggregate reports. A domain whose reports land outside itself also needs an RFC 7489 authorisation record, which this configuration derives and publishes."
 }
 
 variable "mail_tlsrpt_rua" {
   type        = string
-  description = "Mailbox receiving SMTP TLS reports."
-}
-
-variable "mail_mta_sts_id" {
-  type        = string
-  description = "MTA-STS policy id. Must change whenever the policy body changes."
+  description = "Default mailbox receiving SMTP TLS reports. Unlike DMARC, RFC 8460 requires no authorisation record for an external destination."
 }
 
 variable "mail_dkim_selector" {
   type        = string
-  description = "DKIM selector mailcow signs with."
+  description = "DKIM selector mailcow signs with. One selector for every domain — mailcow keys are per-domain, the selector name is not."
   default     = "dkim"
 }
 
-variable "mail_dkim_txt" {
-  type        = string
+variable "mail_dkim" {
+  type        = map(string)
   description = <<-EOT
-    Full DKIM record value, taken verbatim from the mailcow API's dkim_txt
-    field. Deliberately not the bare public key: a 2048-bit key overruns the
-    255-byte limit on a single TXT character-string, and mailcow already
-    emits the correctly split "chunk" "chunk" form. Rebuilding it here would
-    reimplement that splitting, badly. Empty until mailcow has generated the
-    key, which keeps the record out of the plan entirely.
+    Full DKIM record value per domain, taken verbatim from the mailcow API's
+    dkim_txt field. Deliberately not the bare public key: a 2048-bit key
+    overruns the 255-byte limit on a single TXT character-string, and mailcow
+    already emits the correctly split "chunk" "chunk" form. Rebuilding it here
+    would reimplement that splitting, badly. A domain missing from this map, or
+    mapped to "", keeps its DKIM record out of the plan entirely — which is the
+    state on the pass that runs before mailcow exists.
   EOT
-  default     = ""
+  default     = {}
+}
+
+variable "mail_mta_sts_serving" {
+  type        = map(bool)
+  description = "Per domain: is mailcow actually answering /.well-known/mta-sts.txt for it yet. Announcing a policy nobody serves makes senders fetch a 404 and file TLS-RPT failures, so the TXT is gated on this and Ansible flips it once the policy answers 200."
+  default     = {}
 }
 
 variable "mail_tlsa" {

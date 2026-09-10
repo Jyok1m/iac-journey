@@ -2,7 +2,7 @@
 
 mailcow-dockerized behind Traefik, with the Cloudflare DNS the mail setup needs
 driven through this repo's own Terraform, and OIDC on the web UI against
-Keycloak.
+Keycloak. One host, several domains.
 
     make mail                       # everything
     make mail TAGS=mailcow-dns      # just the DNS passes
@@ -12,6 +12,54 @@ The reference implementation is the official documentation at
 <https://docs.mailcow.email>. Every place this role departs from it is listed
 at the bottom with the reason. Anything not listed there is upstream's design,
 not ours.
+
+## One host, several sending domains
+
+`mail.joachimjasmin.com` is the only hostname. It is the SMTP HELO name, the
+PTR target and the CN of the certificate on 25/465/587, and those three have to
+agree — so it belongs to the machine, not to any one domain. Adding a domain
+adds no hostname, no address, no certificate and no reverse record.
+
+What is per-domain is everything a receiver checks against the envelope
+sender — MX, SPF, DKIM, DMARC, TLS-RPT, MTA-STS — plus the domain and its
+mailboxes inside mailcow.
+
+| Domain | Mailboxes | Client autoconfig |
+| --- | --- | --- |
+| `joachimjasmin.com` | info, invoice, dmarc, newsletter, no-reply, alert | yes |
+| `ipseis.eu` | helenedm | yes |
+| `odyssai.app` | no-reply | no |
+
+Each address is an ordinary mailbox with its own password, so every app
+authenticates on submission as itself: a leaked password sends as one address,
+not as the domain. Passwords live in `mailcow_vault_mailboxes`, **keyed by the
+full address** — `no-reply` exists on two of these domains, and a map keyed on
+the local part alone would have silently given them one shared password.
+
+`client_autoconfig` is off for `odyssai.app` because nothing there is ever
+opened in a mail client. It publishes `autodiscover`/`autoconfig`, eleven SRV
+records and two DAV hints, and each of those two names becomes a certificate
+Traefik has to keep renewing. `mta_sts` is a separate switch and stays on
+everywhere: that one is about how other MTAs deliver to us.
+
+The domain list is written down twice — `mailcow_domains` in this role,
+`mail_domains` in `terraform/mail.auto.tfvars` — because there is no file a
+tfvars and an Ansible role can both read. Preflight compares them and refuses
+to run if they disagree. A domain in one and not the other fails in a way that
+looks like a working deployment: mailboxes whose mail has no MX, or an MX for
+a domain mailcow rejects at RCPT TO, which turns this host into a backscatter
+source.
+
+### DMARC reports cross a domain boundary here
+
+All three domains send their aggregate reports to `dmarc@joachimjasmin.com`.
+RFC 7489 §7.1 makes that conditional: a receiver must not send reports to a
+mailbox outside the domain the DMARC record belongs to unless that other domain
+publishes `"v=DMARC1"` at `<policy-domain>._report._dmarc.<report-domain>`.
+`mail.tf` derives those records and publishes them into the report domain's
+zone. Without them the reports are simply never sent, and `p=reject` is
+enforced with nobody watching. TLS-RPT has no equivalent requirement (RFC 8460
+§3), so nothing is published for it.
 
 ## Why the DNS is applied in two passes
 
@@ -30,12 +78,28 @@ resolver returning it; `ptr` refuses to continue if the reverse is wrong;
 `dkim` runs after the stack is up and publishes what mailcow generated.
 
 `tf_vars.yml` recomputes the dynamic Terraform inputs before *both* passes
-rather than only the second. That detail is load-bearing. `mail_dkim_txt` and
-`mail_mta_sts_enabled` both default to "absent" in the HCL, so a pass that
+rather than only the second. That detail is load-bearing. `mail_dkim` and
+`mail_mta_sts_serving` both default to "absent" in the HCL, so a pass that
 omitted them once mailcow was running would plan to **delete** a live DKIM
 record — a destructive plan, which the guardrail then refuses, killing the run
 on its second execution. Recomputing every time means a steady-state run plans
 nothing at all.
+
+Both are maps keyed by domain, and a domain missing from either keeps its own
+record out of the plan without touching the others. That is what lets a fourth
+domain be added later: its DKIM record appears on the pass after mailcow
+generates the key, while the three that already work stay untouched.
+
+The corollary is that the generated file must never be rewritten from an
+unanswered question. It is not a report of what mailcow says right now; it is
+the last state terraform was told to publish. On the first pass of any deploy
+the stack is down — that pass is what publishes the DNS the stack needs to come
+up — so the API returns nothing, and writing that through as an empty map plans
+to **delete** a live DKIM record. The guardrail refuses it, correctly, and the
+run dies before it can bring anything up. `tf_vars.yml` therefore only rewrites
+the file when every domain actually answered. "This domain has no key" (HTTP
+200, empty `dkim_txt`) is an answer and is written through; "mailcow did not
+answer" is not, and leaves the file alone.
 
 ## The Terraform boundary
 
@@ -47,8 +111,15 @@ exact saved plan file. Nothing is ever auto-approved unread.
 
 Mail records live in `cloudflare_dns_record.mail`, a separate resource from the
 pre-existing `cloudflare_dns_record.this`. They share nothing but the provider,
-so no change here can put the apex and wildcard records of three zones inside
+so no change here can put the apex and wildcard records of five zones inside
 its blast radius.
+
+Going multi-domain moved every key of that resource from `<slot>` to
+`<domain>/<slot>`, which Terraform reads as delete-then-create. `mail.moved.tf`
+states the rename instead. Those blocks are no-ops once the state has moved and
+are kept rather than deleted — without them, a restored older state would plan
+to tear down and rebuild the live MX, SPF and DKIM of a working mail server,
+and the guardrail would (correctly) abort the run instead.
 
 ## What is not automated, and why
 
@@ -56,8 +127,15 @@ Two things, both because no credential in this repo can reach them:
 
 | Action | Where | Why it cannot be automated |
 | --- | --- | --- |
-| PTR / rDNS for both addresses → `mail.joachimjasmin.com` | OVH manager | Reverse DNS is delegated to whoever owns the IP block. The role fails with the exact click path if it is wrong. |
-| DS record | Squarespace Domains | The zone is on Cloudflare but registered at Squarespace, which has no API credential here. `terraform output mail_dnssec_ds` prints the exact value. |
+| PTR / rDNS for both addresses → `mail.joachimjasmin.com` | OVH manager | Reverse DNS is delegated to whoever owns the IP block. The role fails with the exact click path if it is wrong. One PTR covers every domain — the hostname is shared. |
+| DS records | each zone's registrar | The zones are on Cloudflare but registered elsewhere, and the three are registered in three different places. `terraform output mail_dnssec_ds` prints the value for each signed zone. |
+
+Only `joachimjasmin.com` is listed in `mail_dnssec_domains` today. Signing the
+other two at Cloudflare is free and reversible, but the chain of trust only
+closes once each DS is pasted at its own registrar, so they are left out until
+someone is ready to do that. `terraform output mail_dnssec_status` tells a zone
+that is not being signed at all (`disabled`) apart from one that is signed and
+waiting on its registrar (`pending`).
 
 ## Deviations from the official documentation
 
@@ -129,6 +207,43 @@ retypes anything, but SOGo never speaks to Keycloak either.
 
 The only mode where a directory credential really validates IMAP and SMTP is
 LDAP, and Keycloak consumes LDAP rather than serving it.
+
+## SOGo has to be restarted when a domain is added
+
+SOGo enumerates the mail domains from the database exactly once, in
+`bootstrap-sogo.sh` at container start, and writes one `SOGoUserSources` block
+per domain into `/etc/sogo/sogo.conf`. Nothing re-reads it afterwards, and
+nothing in the stack restarts SOGo when mailcow gains a domain.
+
+The failure this produces is worth naming because it does not look like what it
+is. Every mailbox in the new domain authenticates against mailcow perfectly —
+the UI log records `logged_in_as` with `Provider: mailcow` — and then the
+redirect to the webmail answers **Unauthorized**. IMAP and SMTP keep working
+throughout, because Dovecot and Postfix read the database live. So it reads as
+a bad password on an account whose password is demonstrably good.
+
+`domain.yml` therefore notifies a `Restart sogo` handler whenever it actually
+creates a domain. Creating one by hand in the UI has the same consequence and
+no handler behind it:
+
+    cd /opt/mailcow && docker compose restart sogo-mailcow
+
+## MTA-STS is wired up but never announced
+
+`mail_mta_sts_serving` gates the `_mta-sts` TXT on mailcow actually answering
+`/.well-known/mta-sts.txt` with a policy. It never does: this build returns 404
+on that path for every domain, including one that has been serving mail for
+months. So the gate holds and the TXT stays unpublished.
+
+That is the right outcome, not a bug to route around. Announcing `v=STSv1` for
+a policy nobody serves makes every sending MTA fetch a 404, fail closed or fall
+back depending on its implementation, and file a TLS-RPT failure against us —
+strictly worse than not announcing at all.
+
+What is published is the `mta-sts.<domain>` CNAME and its certificate, on all
+three domains. They cost three names on Traefik's renewal list and buy the
+ability to turn the announcement on in a single run the day upstream serves the
+policy. `verify` reports the state and does not fail on it.
 
 ## DANE is not published
 
