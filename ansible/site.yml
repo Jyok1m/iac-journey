@@ -72,6 +72,7 @@
     - vaults/n8n.yml
   roles:
     - {role: heirloom, tags: [heirloom]}
+    - {role: odyssai, tags: [odyssai]}
     - {role: portfolio, tags: [portfolio]}
     - {role: n8n, tags: [n8n]}
   tags: [personal-apps]

@@ -1,0 +1,72 @@
+---
+# Default Role
+odyssai_app_name: odyssai
+odyssai_app_dir: /opt/{{ odyssai_app_name }}
+
+odyssai_deploy_group: jenkins
+
+# Second copy of the whole stack — API and front — on :dev images. The pipeline
+# builds and publishes the `dev` branch too, so the images always exist.
+# Set to false to stop rendering and deploying it.
+odyssai_dev_enabled: true
+
+# Images — the Jenkinsfile tags on the branch name, so `main` is production and
+# `dev` is the staging copy. There is no :latest to promote: the two tags are
+# built from different sources and, for the front, with a different SITE_URL
+# baked in.
+odyssai_image_ns: jyok1m
+
+# Service API (NestJS)
+odyssai_api_image: "{{ odyssai_image_ns }}/odyssai-api:main"
+odyssai_api_container_name: odyssai-api
+# PORT is pinned in the image; repeated here because the compose healthcheck
+# and the Traefik service port both have to agree with it.
+odyssai_api_port: 3001
+# Heap capped below the cgroup limit so V8 aborts with a JS stack trace instead
+# of being SIGKILLed by the kernel.
+odyssai_api_memory: 512M
+odyssai_api_heap_mb: 384
+odyssai_api_dev_image: "{{ odyssai_image_ns }}/odyssai-api:dev"
+odyssai_api_dev_container_name: odyssai-api-dev
+
+# Service Web (Next.js, output standalone)
+odyssai_web_image: "{{ odyssai_image_ns }}/odyssai-web:main"
+odyssai_web_container_name: odyssai-web
+odyssai_web_port: 3000
+# A standalone Next server idles around 100 MB; the ceiling is there for the
+# SSR bursts, and the heap stays under it for the same reason as the API.
+odyssai_web_memory: 512M
+odyssai_web_heap_mb: 384
+odyssai_web_dev_image: "{{ odyssai_image_ns }}/odyssai-web:dev"
+odyssai_web_dev_container_name: odyssai-web-dev
+
+# Routing — front
+# The apex and *.odyssai.app are the two records terraform publishes for this
+# zone, both proxied by Cloudflare and both pointing at this host.
+odyssai_domain: odyssai.app
+odyssai_web_host: "{{ odyssai_domain }}"
+odyssai_web_router: Host(`{{ odyssai_web_host }}`)
+odyssai_web_alias_router: Host(`www.{{ odyssai_web_host }}`)
+odyssai_web_dev_host: dev.{{ odyssai_domain }}
+odyssai_web_dev_router: Host(`{{ odyssai_web_dev_host }}`)
+
+# Routing — API
+# Public on a host of its own. Nothing in apps/web calls it yet, so this only
+# buys a curlable endpoint today; flip to false to keep the API reachable from
+# the front over the internal network alone.
+odyssai_api_public: true
+odyssai_api_host: api.{{ odyssai_domain }}
+odyssai_api_router: Host(`{{ odyssai_api_host }}`)
+# Deliberately api-dev, not api.dev: a DNS wildcard matches a single label, so
+# *.odyssai.app covers api-dev.odyssai.app but not api.dev.odyssai.app — which
+# would resolve nowhere, and would not be covered by Cloudflare's edge
+# certificate either.
+odyssai_api_dev_host: api-dev.{{ odyssai_domain }}
+odyssai_api_dev_router: Host(`{{ odyssai_api_dev_host }}`)
+
+# Canonical origin of the front — canonical tags, hreflang, OpenGraph, sitemap
+# and robots. The pipeline already bakes it into the image (the locale routes
+# are prerendered), but src/lib/seo.ts reads it at runtime for everything that
+# is not, so it has to be set here too and has to match what the build used.
+odyssai_site_url: https://{{ odyssai_web_host }}
+odyssai_dev_site_url: https://{{ odyssai_web_dev_host }}

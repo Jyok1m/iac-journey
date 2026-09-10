@@ -3,6 +3,13 @@
 portfolio_app_name: portfolio
 portfolio_app_dir: /opt/{{ portfolio_app_name }}
 
+# Host group allowed to read the stack directory. Jenkins deploys this app over
+# SSH and shells out to `docker compose` from that account, so it needs to
+# traverse the directory and read the compose file — Compose stats `.env` in
+# the project directory before it reads anything else, and that stat is what
+# fails with "permission denied" when the directory is root-only.
+portfolio_deploy_group: jenkins
+
 # Service Portfolio
 portfolio_image: jyok1m/portfolio:latest
 portfolio_container_name: portfolio

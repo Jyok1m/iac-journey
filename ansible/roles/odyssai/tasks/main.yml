@@ -1,0 +1,37 @@
+---
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ odyssai_app_dir }}"
+    state: directory
+    owner: root
+    group: "{{ odyssai_deploy_group }}"
+    mode: "0750"
+
+# No env file yet, and none rendered on purpose: the API is still the bare Nest
+# scaffold and reads nothing but PORT, which the image sets. The two runtime
+# values the stack does need — SITE_URL and the heap ceilings — are not secrets
+# and live in the compose file. Add a vault under vaults/ and a template here
+# the day Postgres, Redis or the LLM keys land.
+- name: Deploy compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ odyssai_app_dir }}/docker-compose.yml"
+    owner: root
+    group: "{{ odyssai_deploy_group }}"
+    mode: "0640"
+
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ odyssai_app_dir }}"
+
+# recreate stays on auto: Compose recreates a container whose image ID moved,
+# which is exactly what a fresh push on the same branch tag produces — so a
+# rebuild of :dev bounces the dev copy and leaves production alone.
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "{{ odyssai_app_dir }}"
+    state: present
+    recreate: auto
+    remove_orphans: true
+    wait: true
+    wait_timeout: 300

@@ -1,0 +1,232 @@
+---
+services:
+  api:
+    image: {{ odyssai_api_image }}
+    container_name: {{ odyssai_api_container_name }}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "{{ odyssai_api_port }}"
+      NODE_OPTIONS: --max-old-space-size={{ odyssai_api_heap_mb }}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ odyssai_api_memory }}
+        reservations:
+          memory: 128M
+    # node's own fetch rather than curl or wget: neither is guaranteed to stay
+    # in the slim base, and the runtime stage installs nothing. Anything under
+    # 500 counts as alive — a redirect still proves the server is answering.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ odyssai_api_port }}/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # odyssai-internal is where the front reaches it; traefik-public carries the
+    # inbound traffic and is also the container's only route out, which the LLM
+    # calls will need as soon as packages/llm is wired in.
+    networks:
+      - odyssai-internal
+      - traefik-public
+    labels:
+{% if odyssai_api_public %}
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ odyssai_api_container_name }}.rule={{ odyssai_api_router }}
+      - traefik.http.routers.{{ odyssai_api_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ odyssai_api_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ odyssai_api_container_name }}.loadbalancer.server.port={{ odyssai_api_port }}
+{% else %}
+      # No public router: the API answers on odyssai-internal only.
+      - traefik.enable=false
+{% endif %}
+
+  web:
+    image: {{ odyssai_web_image }}
+    container_name: {{ odyssai_web_container_name }}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "{{ odyssai_web_port }}"
+      HOSTNAME: 0.0.0.0
+      NODE_OPTIONS: --max-old-space-size={{ odyssai_web_heap_mb }}
+      # Already baked into the image by the pipeline for the prerendered
+      # locales; repeated here for the routes that read it at request time.
+      SITE_URL: {{ odyssai_site_url }}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ odyssai_web_memory }}
+        reservations:
+          memory: 128M
+    # Start ordering only, no health gate: the public site must not be held
+    # down by an unhealthy API — the front renders on its own today, and even
+    # once it calls the API that is a per-request failure, not a boot one.
+    depends_on:
+      - api
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ odyssai_web_port }}/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Server-side calls to the API stay on odyssai-internal once the front
+    # starts making them: http://{{ odyssai_api_container_name }}:{{ odyssai_api_port }},
+    # no round trip through the public proxy, nothing a DNS outage or an expired
+    # certificate can break.
+    networks:
+      - odyssai-internal
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      # Canonical host
+      - traefik.http.routers.{{ odyssai_web_container_name }}.rule={{ odyssai_web_router }}
+      - traefik.http.routers.{{ odyssai_web_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ odyssai_web_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ odyssai_web_container_name }}.loadbalancer.server.port={{ odyssai_web_port }}
+      # Permanent redirect from www to the canonical host. One name has to be
+      # the only one crawlers see, and SITE_URL — baked at build time — already
+      # declares that name in the canonical tags.
+      - traefik.http.routers.{{ odyssai_web_container_name }}-alias.rule={{ odyssai_web_alias_router }}
+      - traefik.http.routers.{{ odyssai_web_container_name }}-alias.entrypoints=websecure
+      - traefik.http.routers.{{ odyssai_web_container_name }}-alias.tls.certresolver=letsencrypt
+      - traefik.http.routers.{{ odyssai_web_container_name }}-alias.service={{ odyssai_web_container_name }}
+      - traefik.http.routers.{{ odyssai_web_container_name }}-alias.middlewares={{ odyssai_web_container_name }}-alias
+      - traefik.http.middlewares.{{ odyssai_web_container_name }}-alias.redirectregex.regex=^https?://[^/]+/(.*)
+      - traefik.http.middlewares.{{ odyssai_web_container_name }}-alias.redirectregex.replacement=https://{{ odyssai_web_host }}/$${1}
+      - traefik.http.middlewares.{{ odyssai_web_container_name }}-alias.redirectregex.permanent=true
+{% if odyssai_dev_enabled %}
+
+  api-dev:
+    image: {{ odyssai_api_dev_image }}
+    container_name: {{ odyssai_api_dev_container_name }}
+    restart: unless-stopped
+    # NODE_ENV stays production on this copy too: the container runs the same
+    # compiled build either way, and development would only change how Nest
+    # reports errors while diverging from what production actually runs.
+    environment:
+      NODE_ENV: production
+      PORT: "{{ odyssai_api_port }}"
+      NODE_OPTIONS: --max-old-space-size={{ odyssai_api_heap_mb }}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ odyssai_api_memory }}
+        reservations:
+          memory: 128M
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ odyssai_api_port }}/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - odyssai-internal-dev
+      - traefik-public
+    labels:
+{% if odyssai_api_public %}
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ odyssai_api_dev_container_name }}.rule={{ odyssai_api_dev_router }}
+      - traefik.http.routers.{{ odyssai_api_dev_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ odyssai_api_dev_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ odyssai_api_dev_container_name }}.loadbalancer.server.port={{ odyssai_api_port }}
+{% else %}
+      - traefik.enable=false
+{% endif %}
+
+  web-dev:
+    image: {{ odyssai_web_dev_image }}
+    container_name: {{ odyssai_web_dev_container_name }}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "{{ odyssai_web_port }}"
+      HOSTNAME: 0.0.0.0
+      NODE_OPTIONS: --max-old-space-size={{ odyssai_web_heap_mb }}
+      SITE_URL: {{ odyssai_dev_site_url }}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ odyssai_web_memory }}
+        reservations:
+          memory: 128M
+    depends_on:
+      - api-dev
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ odyssai_web_port }}/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - odyssai-internal-dev
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      # No alias router here: the dev front answers on a single name, and
+      # nothing should be indexing it anyway.
+      - traefik.http.routers.{{ odyssai_web_dev_container_name }}.rule={{ odyssai_web_dev_router }}
+      - traefik.http.routers.{{ odyssai_web_dev_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ odyssai_web_dev_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ odyssai_web_dev_container_name }}.loadbalancer.server.port={{ odyssai_web_port }}
+{% endif %}
+
+# Compose stamps every network it creates with the key used to declare it and
+# then refuses to touch one whose stamp no longer matches, so these keys are
+# fixed for the life of the stack — renaming one strands the running network.
+networks:
+  odyssai-internal:
+    name: {{ odyssai_app_name }}-internal
+    internal: true
+  traefik-public:
+    name: traefik-public
+    external: true
+{% if odyssai_dev_enabled %}
+  odyssai-internal-dev:
+    name: {{ odyssai_app_name }}-internal-dev
+    internal: true
+{% endif %}

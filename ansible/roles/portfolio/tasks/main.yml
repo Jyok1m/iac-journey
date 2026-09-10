@@ -1,10 +1,12 @@
 ---
+# Group-owned by the deploy account: Jenkins runs `docker compose` here over
+# SSH, and Compose stats the project directory before it reads anything in it.
 - name: Create stack directory
   ansible.builtin.file:
     path: "{{ portfolio_app_dir }}"
     state: directory
     owner: root
-    group: root
+    group: "{{ portfolio_deploy_group }}"
     mode: "0750"
 
 - name: Deploy compose file
@@ -12,7 +14,7 @@
     src: docker-compose.yml.j2
     dest: "{{ portfolio_app_dir }}/docker-compose.yml"
     owner: root
-    group: root
+    group: "{{ portfolio_deploy_group }}"
     mode: "0640"
 
 - name: Pull images
