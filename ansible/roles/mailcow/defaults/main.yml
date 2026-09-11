@@ -158,6 +158,7 @@ mailcow_mailboxes:
   # ipseis.eu
   - {address: helenedm@ipseis.eu, name: Hélène DM, quota: 5120}
   # odyssai.app
+  - {address: no-reply-dev@odyssai.app, name: No reply dev, quota: 1024}
   - {address: no-reply@odyssai.app, name: No reply, quota: 1024}
 
 # postmaster and abuse are the two addresses RFC 2142 makes mandatory, and a

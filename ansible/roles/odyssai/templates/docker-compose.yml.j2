@@ -181,6 +181,8 @@ services:
     volumes:
       - ./{{ odyssai_redis_dev_conf_file }}:/usr/local/etc/redis/redis.conf:ro
       - redis-dev-data:/data
+    ports:
+      - "127.0.0.1:{{ odyssai_redis_port_dev }}:{{ odyssai_redis_port }}"
     deploy:
       resources:
         limits:

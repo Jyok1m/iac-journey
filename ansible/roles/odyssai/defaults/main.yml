@@ -71,6 +71,7 @@ odyssai_redis_image: redis:8-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4c
 odyssai_redis_container_name: odyssai-redis
 odyssai_redis_dev_container_name: odyssai-redis-dev
 odyssai_redis_port: 6379
+odyssai_redis_port_dev: 16379
 # Sessions are small and all carry a TTL. The ceiling is there so a leak cannot
 # starve the host, and volatile-ttl evicts what expires soonest rather than
 # refusing writes.
