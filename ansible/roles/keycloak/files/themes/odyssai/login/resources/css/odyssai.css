@@ -287,8 +287,19 @@ a:hover {
   font-weight: 500;
 }
 
+/* Plusieurs pages heritees posent deux boutons cote a cote (valider / annuler) :
+   ils se partagent la ligne, sauf celui qui demande explicitement toute la
+   largeur. */
 .odyssai-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-top: 24px;
+}
+
+.odyssai-buttons .odyssai-btn:not(.odyssai-btn--block),
+.form-actions .odyssai-btn:not(.odyssai-btn--block) {
+  flex: 1 1 0;
 }
 
 /* ------------------------------------------------------------------ boutons */
@@ -333,6 +344,13 @@ a:hover {
 
 .odyssai-btn--block {
   width: 100%;
+}
+
+/* base pose kcButtonLargeClass sur tous ses boutons de validation : sans regle,
+   le bouton d'inscription etait plus bas que celui de connexion. */
+.odyssai-btn--large {
+  height: 44px;
+  padding: 0 22px;
 }
 
 .odyssai-btn:disabled {
@@ -445,6 +463,353 @@ a:hover {
   color: var(--arcane);
 }
 
+/* --------------------------------------------- pages heritees du theme base
+
+   Seuls template.ftl et login.ftl sont surcharges ici : inscription,
+   reinitialisation de mot de passe, OTP, conditions d'utilisation et pages
+   d'information sortent telles quelles de base. Leur balisage est fige — c'est
+   donc au style de s'y adapter, plutot qu'a une copie des gabarits qui
+   divergerait a chaque montee de version de Keycloak. */
+
+/* base pose le libelle et son asterisque en freres dans ce conteneur : en bloc,
+   l'asterisque tombait sur sa propre ligne sous chaque champ. */
+.odyssai-label-wrapper {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.odyssai-label-wrapper .required {
+  color: var(--ember);
+  font-size: 14px;
+}
+
+/* Le meme conteneur sert de ligne « case a cocher + libelle » pour les
+   conditions d'utilisation : le libelle y perd sa mise en bloc. */
+.odyssai-label-wrapper .odyssai-checkbox + .odyssai-label {
+  margin-bottom: 0;
+  font-weight: 400;
+  color: var(--vellum-2);
+}
+
+/* Groupe champ + bouton d'affichage du mot de passe. */
+.odyssai-input-group {
+  position: relative;
+  display: flex;
+}
+
+.odyssai-input-group .odyssai-input {
+  padding-right: 44px;
+}
+
+.odyssai-pwd-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  background: none;
+  color: var(--vellum-3);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.odyssai-pwd-toggle:hover {
+  color: var(--vellum);
+}
+
+/* Jeu d'icones en masque CSS. base attend les classes FontAwesome du theme
+   keycloak ; ce theme ne charge pas PatternFly, d'ou ces silhouettes locales,
+   sans requete reseau et teintees par currentColor. */
+.odyssai-icon {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+
+.odyssai-icon--eye {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E");
+}
+
+.odyssai-icon--eye-off {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.7 5.1A10.9 10.9 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.8 3.8M6.6 6.6A18.6 18.6 0 0 0 2 12s3.6 7 10 7a10.8 10.8 0 0 0 4.4-.9'/%3E%3Cpath d='M9.9 9.9a3 3 0 0 0 4.2 4.2'/%3E%3Cpath d='M3 3l18 18'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.7 5.1A10.9 10.9 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.8 3.8M6.6 6.6A18.6 18.6 0 0 0 2 12s3.6 7 10 7a10.8 10.8 0 0 0 4.4-.9'/%3E%3Cpath d='M9.9 9.9a3 3 0 0 0 4.2 4.2'/%3E%3Cpath d='M3 3l18 18'/%3E%3C/svg%3E");
+}
+
+.odyssai-icon--key {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.6 17.4A2 2 0 0 0 2 18.8V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4z'/%3E%3Ccircle cx='16.5' cy='7.5' r='.6' fill='black' stroke='none'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.6 17.4A2 2 0 0 0 2 18.8V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4z'/%3E%3Ccircle cx='16.5' cy='7.5' r='.6' fill='black' stroke='none'/%3E%3C/svg%3E");
+}
+
+.odyssai-icon--arrow {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+}
+
+.odyssai-textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+/* Listes de choix du user profile (radios, cases a cocher multiples). */
+.odyssai-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.odyssai-choice + .odyssai-choice {
+  margin-top: 8px;
+}
+
+.odyssai-radio {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.odyssai-choice-label {
+  font-size: 14px;
+  color: var(--vellum-2);
+  cursor: pointer;
+}
+
+.odyssai-choice-label--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* « Deconnecter les autres sessions », sur les pages de changement de mot de
+   passe : base y enveloppe la case dans un .checkbox non classe. */
+.odyssai-options .checkbox {
+  margin: 0;
+}
+
+.odyssai-options .checkbox label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vellum-2);
+  cursor: pointer;
+}
+
+.odyssai-options .checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+/* Groupes non classes de base (recaptcha, acceptation des conditions). */
+.odyssai-form .form-group + .form-group,
+.odyssai-form .form-group + .odyssai-field,
+.odyssai-field + .form-group {
+  margin-top: 18px;
+}
+
+.odyssai-mt {
+  margin-top: 18px;
+}
+
+/* Pages d'information, d'erreur et de verification d'e-mail. */
+.instruction {
+  margin: 0 0 16px;
+  font-size: 15px;
+  color: var(--vellum-2);
+}
+
+#kc-info-message > :last-child,
+#kc-error-message > :last-child {
+  margin-bottom: 0;
+}
+
+#kc-error-message #traceId {
+  font-size: 13px;
+  color: var(--vellum-3);
+}
+
+/* Conditions d'utilisation : le texte peut etre long, il defile dans son cadre
+   plutot que de repousser les boutons hors de l'ecran. */
+#kc-terms-text,
+#kc-registration-terms-text {
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--abyss);
+  font-size: 14px;
+  color: var(--vellum-2);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* Choix du second facteur. */
+.odyssai-authlist {
+  display: grid;
+  gap: 12px;
+}
+
+.odyssai-authlist-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--abyss);
+  color: var(--vellum);
+  font: 400 15px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.odyssai-authlist-item:hover {
+  background: var(--mist);
+  border-color: var(--vellum-3);
+}
+
+.odyssai-authlist-icon,
+.odyssai-authlist-arrow {
+  display: flex;
+}
+
+.odyssai-authlist-icon {
+  color: var(--accent);
+}
+
+.odyssai-authlist-arrow {
+  color: var(--vellum-3);
+}
+
+.odyssai-authlist-body {
+  display: grid;
+  gap: 2px;
+}
+
+.odyssai-authlist-title {
+  font-weight: 500;
+}
+
+.odyssai-authlist-desc {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--vellum-3);
+}
+
+.odyssai-authlist-fill {
+  flex: 1 1 auto;
+}
+
+/* Selection d'un authentificateur OTP : le bouton radio est masque au profit
+   de la carte, qui reste atteignable au clavier via :focus-visible. */
+.odyssai-otp-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  opacity: 0;
+}
+
+.odyssai-otp-option {
+  display: block;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--abyss);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.odyssai-otp-option + .odyssai-otp-radio + .odyssai-otp-option,
+.odyssai-otp-radio + .odyssai-otp-option {
+  margin-top: 8px;
+}
+
+.odyssai-otp-radio:checked + .odyssai-otp-option {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.odyssai-otp-radio:focus-visible + .odyssai-otp-option {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.odyssai-otp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.odyssai-otp-icon {
+  display: flex;
+  color: var(--accent);
+}
+
+.odyssai-otp-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Codes de recuperation : chiffres alignes, donc chasse fixe. */
+.odyssai-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0 0 24px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--abyss);
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+}
+
+.odyssai-codes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.odyssai-codes-warning {
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--brass);
+}
+
+.odyssai-social-logo {
+  width: 18px;
+  height: 18px;
+}
+
 /* ------------------------------------------------------- blocs secondaires */
 
 .odyssai-info-area {
@@ -465,8 +830,9 @@ a:hover {
 .odyssai-content-wrapper,
 .odyssai-form-area,
 .odyssai-input-wrapper,
-.odyssai-label-wrapper,
 .odyssai-options-wrapper,
+.odyssai-buttons-wrapper,
+.odyssai-info-wrapper,
 .odyssai-feedback {
   display: block;
 }

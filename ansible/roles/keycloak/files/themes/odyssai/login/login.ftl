@@ -71,7 +71,7 @@
           <input type="hidden" id="id-hidden-input" name="credentialId"
                  value="<#if auth.selectedCredential?has_content>${auth.selectedCredential}</#if>">
           <button type="submit" name="login" id="kc-login"
-                  class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!}"
+                  class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}"
                   <#if usernameEditDisabled??>disabled</#if>>${msg("doLogIn")}</button>
         </div>
       </form>
