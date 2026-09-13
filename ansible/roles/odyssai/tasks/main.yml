@@ -17,8 +17,8 @@
     src: odyssai-api.env.j2
     dest: "{{ odyssai_app_dir }}/{{ item.file }}"
     owner: root
-    group: root
-    mode: "0600"
+    group: "{{ odyssai_deploy_group }}"
+    mode: "0640"
   loop: "{{ odyssai_api_env_targets }}"
   vars:
     api_host: "{{ item.api_host }}"
