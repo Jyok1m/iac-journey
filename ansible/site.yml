@@ -36,6 +36,9 @@
   hosts: portfolio
   vars_files:
     - vaults/keycloak.yml
+    # Le role keycloak configure les realms OdyssAI, dont le SMTP : il lui faut
+    # le mot de passe des boites no-reply, qui vit dans le vault de mailcow.
+    - vaults/mailcow.yml
     - vaults/komodo.yml
     - vaults/monitoring.yml
   roles:

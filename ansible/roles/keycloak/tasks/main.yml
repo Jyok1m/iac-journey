@@ -49,3 +49,75 @@
     remove_orphans: true
     wait: true
     wait_timeout: 300
+
+# Resolution locale du nom public du SSO.
+#
+# Le nom est proxifie par Cloudflare, dont la protection anti-robot juge la
+# signature TLS du client et pas seulement son User-Agent. curl et la pile de
+# Node passent ; celle d'Ansible, qui construit son propre contexte TLS, se
+# fait rendre un 403 code 1010. Toute tache d'administration du realm echouait
+# donc depuis la machine elle-meme.
+#
+# Pointer le nom sur la boucle locale met Traefik en face au lieu de
+# Cloudflare : le SNI et l'en-tete Host restent le nom public, le certificat
+# est celui que Traefik detient deja, et rien n'est affaibli cote edge. C'est
+# aussi un aller-retour public en moins pour une operation interne.
+#
+# Sans effet sur les conteneurs : ils ont leur propre resolution et ne lisent
+# pas ce fichier.
+- name: Resolve the SSO hostname locally
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '\s{{ keycloak_host | regex_escape }}$'
+    line: "127.0.0.1 {{ keycloak_host }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# ------------------------------------------------------------------ realms
+
+# Delegue au controleur et non a la machine. Le realm se configure par l'API
+# d'administration, qui est une API HTTP comme une autre : rien n'exige de
+# partir du serveur, et le script n'a besoin que de curl et jq, presents sur le
+# poste. Cela evite aussi d'installer jq sur l'hote pour une operation qui n'y
+# touche a rien.
+#
+# run_once parce que l'inventaire peut compter plusieurs hotes : les realms,
+# eux, n'existent qu'une fois.
+- name: Configure the OdyssAI realms
+  ansible.builtin.script:
+    cmd: setup-realm.sh {{ item.0.name }}
+    executable: /bin/bash
+  environment:
+    KC_URL: "{{ keycloak_url }}"
+    KC_ADMIN_CLIENT_ID: "{{ keycloak_vault_provisioner_id }}"
+    KC_ADMIN_CLIENT_SECRET: "{{ keycloak_vault_provisioner_secret }}"
+    DISPLAY_NAME: "{{ item.0.display_name }}"
+    API_CLIENT_ID: "{{ item.1.id }}"
+    API_BASE_URL: "{{ item.1.api_url }}"
+    WEB_BASE_URL: "{{ item.1.web_url }}"
+    LOGIN_THEME: "{{ keycloak_odyssai_login_theme }}"
+    SMTP_HOST: "{{ keycloak_odyssai_smtp_host }}"
+    SMTP_PORT: "{{ keycloak_odyssai_smtp_port | string }}"
+    SMTP_FROM: "{{ item.0.mailbox }}"
+    SMTP_FROM_NAME: "{{ item.0.display_name }}"
+    SMTP_PASSWORD: "{{ mailcow_vault_mailboxes[item.0.mailbox] }}"
+  # Un passage par client. Les reglages de realm sont reecrits a l'identique a
+  # chaque fois, le script etant idempotent.
+  loop: "{{ keycloak_odyssai_realms | subelements('clients') }}"
+  loop_control:
+    label: "{{ item.0.name }} / {{ item.1.id }}"
+  delegate_to: localhost
+  run_once: true
+  vars:
+    # ansible_become vaut true pour tout l'inventaire, et une variable de
+    # connexion l'emporte sur le mot-cle `become` de la tache : le poser a faux
+    # ici est la seule facon de ne pas demander sudo sur le poste, qui n'en a
+    # aucun besoin pour appeler une API.
+    ansible_become: false
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  no_log: true
+  # Le script est idempotent : il met a jour un realm existant et n'en recree
+  # aucun. Rien a signaler tant qu'il sort en 0.
+  changed_when: false

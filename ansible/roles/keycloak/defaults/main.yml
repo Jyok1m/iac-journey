@@ -12,10 +12,61 @@ keycloak_pg_env_file: keycloak-db.env
 keycloak_image: quay.io/keycloak/keycloak:26.7@sha256:0f198be292568439d700cdbfb893e69a6009bb43a94a06a945b1d3d506c76b13
 keycloak_container_name: keycloak
 keycloak_env_file: keycloak.env
-keycloak_router: Host(`sso.{{ portfolio_domain_com }}`)
+keycloak_host: sso.{{ portfolio_domain_com }}
+keycloak_url: https://{{ keycloak_host }}
+keycloak_router: Host(`{{ keycloak_host }}`)
 
 # Custom login themes, mounted read-only. The themes Keycloak ships with live
 # in its JARs, so this mount adds to them rather than hiding them.
 # Contents come from files/themes/ — see the README there for where the odyssai
 # theme is authored.
 keycloak_themes_dir: "{{ keycloak_app_dir }}/themes"
+
+# ------------------------------------------------------------------ realms
+#
+# Source de verite unique des realms OdyssAI. Un seul ecrivain, files/setup-realm.sh,
+# et un seul endroit ou declarer ce qu'il doit ecrire : ici.
+#
+# Chaque entree decrit un environnement complet. `extra_redirects` et
+# `extra_post_logout` sont la ou un realm sert plusieurs fronts a la fois : celui
+# de developpement repond a la copie deployee comme au poste du developpeur, et
+# n'en declarer qu'un efface l'autre. Les URI restent exactes, jamais un joker.
+#
+# `mailbox` est l'adresse d'expedition, et sert aussi d'identifiant SMTP : la
+# boite s'authentifie comme elle-meme. Son mot de passe vient de
+# mailcow_vault_mailboxes, indexe par adresse complete. Vide, le realm est
+# configure sans envoi et la verification d'adresse reste desactivee.
+keycloak_odyssai_domain: odyssai.app
+keycloak_odyssai_smtp_host: mail.{{ portfolio_domain_com }}
+keycloak_odyssai_smtp_port: 587
+
+# Un client par front, jamais un client pour deux. C'est la lecon de la
+# journee : un client ne porte qu'un seul baseUrl, et Keycloak s'en sert comme
+# destination de repli quand il a perdu le contexte. Partage entre le poste du
+# developpeur et la copie deployee, il renvoyait systematiquement sur l'autre.
+#
+# Separes, chaque client a ses propres origines, son propre retour vers le
+# site, et le client deploye cesse d'accepter localhost, ce qui est aussi plus
+# sain.
+keycloak_odyssai_realms:
+  - name: odyssai-prod
+    display_name: OdyssAI
+    mailbox: no-reply@{{ keycloak_odyssai_domain }}
+    clients:
+      - id: odyssai-api
+        api_url: https://api.{{ keycloak_odyssai_domain }}
+        web_url: https://{{ keycloak_odyssai_domain }}
+  - name: odyssai-dev
+    display_name: OdyssAI (dev)
+    mailbox: no-reply-dev@{{ keycloak_odyssai_domain }}
+    clients:
+      - id: odyssai-api
+        api_url: https://api-dev.{{ keycloak_odyssai_domain }}
+        web_url: https://dev.{{ keycloak_odyssai_domain }}
+      # Le poste du developpeur. Son secret se recupere dans la sortie du
+      # script, ou dans la console, et se reporte dans le .env local.
+      - id: odyssai-api-local
+        api_url: http://localhost:3001
+        web_url: http://localhost:3000
+
+keycloak_odyssai_login_theme: odyssai
