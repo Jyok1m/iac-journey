@@ -52,7 +52,13 @@ services:
       - 80:80/tcp
       - 443:443/tcp
     networks:
-      - traefik-public
+      traefik-public:
+{% if traefik_internal_aliases %}
+        aliases:
+{% for alias in traefik_internal_aliases %}
+          - {{ alias }}
+{% endfor %}
+{% endif %}
 
 networks:
   traefik-public:
