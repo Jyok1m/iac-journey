@@ -50,9 +50,22 @@
       </#if>
 
       <#-- Le wordmark ne s'emploie jamais sans le symbole : c'est le lockup
-           complet qui est servi ici, jamais le seul texte. -->
+           complet qui est servi ici, jamais le seul texte.
+
+           Le retour prefere pageRedirectUri, pose par Keycloak pour la requete
+           en cours, et retombe sur client.baseUrl sinon. C'est l'ordre du
+           theme base, et il n'est juste que parce qu'un client ne sert qu'un
+           seul front : c'est le role ansible qui garantit ce decoupage, un
+           client par environnement. -->
       <div class="odyssai-brand">
-        <img src="${url.resourcesPath}/img/odyssai-logo-dark.svg" alt="OdyssAI" height="32">
+        <#assign backUrl = pageRedirectUri!(client.baseUrl)!"">
+        <#if backUrl?has_content>
+          <a href="${backUrl}" class="odyssai-brand-link">
+            <img src="${url.resourcesPath}/img/odyssai-logo-dark.svg" alt="OdyssAI" height="32">
+          </a>
+        <#else>
+          <img src="${url.resourcesPath}/img/odyssai-logo-dark.svg" alt="OdyssAI" height="32">
+        </#if>
       </div>
 
       <header class="${properties.kcFormHeaderClass!}">
@@ -70,6 +83,18 @@
       </#if>
 
       <#nested "form">
+
+      <#-- actionUri en second : sur une page d'action, c'est la suite du
+           parcours et non un retour, d'ou l'autre libelle. -->
+      <#if backUrl?has_content>
+        <p class="odyssai-back">
+          <a href="${backUrl}">${kcSanitize(msg("backToApplication"))?no_esc}</a>
+        </p>
+      <#elseif actionUri?has_content>
+        <p class="odyssai-back">
+          <a href="${actionUri}">${kcSanitize(msg("proceedWithAction"))?no_esc}</a>
+        </p>
+      </#if>
 
       <#if auth?has_content && auth.showTryAnotherWayLink() && showAnotherWayIfPresent>
         <form id="kc-select-try-another-way-form" action="${url.loginAction}" method="post">

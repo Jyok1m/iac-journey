@@ -78,6 +78,21 @@ a:hover {
   outline-offset: 2px;
 }
 
+/* Le curseur dit ce qui est cliquable, y compris sur les pages heritees de
+   base, qui posent des boutons sans nos classes. Pose une fois ici plutot que
+   repete sur chaque controle, ou il finirait par manquer quelque part. */
+button:not(:disabled),
+input[type="submit"]:not(:disabled),
+label[for],
+summary {
+  cursor: pointer;
+}
+
+button:disabled,
+input[type="submit"]:disabled {
+  cursor: not-allowed;
+}
+
 /* ------------------------------------------------------------------ layout */
 
 .odyssai-split {
@@ -180,7 +195,7 @@ a:hover {
 }
 
 .odyssai-required-note {
-  margin: 8px 0 0;
+  margin: 14px 0 0;
   font-size: 13px;
   color: var(--vellum-3);
 }
@@ -808,6 +823,51 @@ a:hover {
 .odyssai-social-logo {
   width: 18px;
   height: 18px;
+}
+
+/* base/login/register.ftl range le lien « retour a la connexion » AVANT le
+   bouton de validation, dans un dernier .odyssai-field. Le balisage est fige,
+   c'est donc a l'ordre visuel de s'adapter : le champ devient une colonne et
+   le bloc de boutons remonte au-dessus du lien. L'ordre du DOM ne bouge pas,
+   la tabulation et les lecteurs d'ecran gardent la sequence d'origine. */
+.odyssai-field:has(> #kc-form-buttons) {
+  display: flex;
+  flex-direction: column;
+}
+
+.odyssai-field > #kc-form-buttons {
+  order: -1;
+}
+
+/* Ce dernier champ n'est pas un champ : il ne porte que des liens et des
+   boutons, et n'a pas besoin de la meme respiration qu'une saisie. */
+.odyssai-field:has(> #kc-form-buttons) > .odyssai-options {
+  margin-top: 20px;
+  justify-content: flex-start;
+}
+
+/* Retour vers le site. Le lockup devient cliquable et un lien explicite ferme
+   la page : sur un ecran de connexion, rien d'autre n'indique la sortie. */
+.odyssai-brand-link {
+  display: inline-block;
+}
+
+.odyssai-brand-link:hover {
+  text-decoration: none;
+  opacity: 0.85;
+}
+
+.odyssai-back {
+  margin: 24px 0 0;
+  font-size: 14px;
+}
+
+.odyssai-back a {
+  color: var(--vellum-2);
+}
+
+.odyssai-back a:hover {
+  color: var(--vellum);
 }
 
 /* ------------------------------------------------------- blocs secondaires */
