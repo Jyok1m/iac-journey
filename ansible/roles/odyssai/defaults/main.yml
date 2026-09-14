@@ -88,6 +88,24 @@ odyssai_keycloak_realm: odyssai-prod
 odyssai_keycloak_dev_realm: odyssai-dev
 odyssai_keycloak_client_id: odyssai-api
 
+# Email delivery for the realms. One mailbox per environment: a message sent
+# by the dev copy must never be able to pass for production, and rotating one
+# password must not silence the other.
+#
+# The host is the public name and not the container: it is the one the mailcow
+# certificate is issued for, which STARTTLS verifies. 587 is the submission
+# port, encrypted by STARTTLS after an initial plaintext connect; 465 would be
+# implicit TLS instead, and the two never combine.
+#
+# The mailbox passwords live in vaults/mailcow.yml, keyed by full address, and
+# the from address doubles as the SMTP username — these mailboxes authenticate
+# as themselves.
+odyssai_smtp_host: mail.{{ portfolio_domain_com }}
+odyssai_smtp_port: 587
+odyssai_smtp_from: no-reply@{{ odyssai_domain }}
+odyssai_smtp_dev_from: no-reply-dev@{{ odyssai_domain }}
+odyssai_smtp_from_display_name: "Joachim @ OdyssAI"
+
 # Env files. Everything the API reads that is either a secret or an origin it
 # cannot guess. NODE_ENV, PORT and the heap ceiling stay in the compose file:
 # they describe the container, not the application.
