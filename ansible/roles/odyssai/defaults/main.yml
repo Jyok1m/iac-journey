@@ -80,6 +80,33 @@ odyssai_redis_maxmemory: 192mb
 odyssai_redis_conf_file: redis.conf
 odyssai_redis_dev_conf_file: redis-dev.conf
 
+# PostgreSQL — one instance per copy of the stack, same reasoning as Redis: the
+# dev copy must never be able to read, or drop, production data.
+# Pinned by digest like the other third-party images in this inventory.
+odyssai_pg_image: postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+odyssai_pg_container_name: odyssai-db
+odyssai_pg_dev_container_name: odyssai-db-dev
+odyssai_pg_port: 5432
+# Published on the host loopback: schema work, dumps and one-off queries happen
+# from a laptop over an SSH tunnel, there is no admin UI behind Traefik to do it
+# through. Two host ports for two servers — production keeps the well-known
+# number, the dev copy is prefixed the way the Redis pair already is.
+odyssai_pg_port_host: 5432
+odyssai_pg_port_host_dev: 15432
+# One set of values for both copies, like the API and the front above: a dev
+# instance tuned differently would stop telling you anything about production.
+odyssai_pg_memory: 512M
+odyssai_pg_shared_buffers: 128MB
+odyssai_pg_effective_cache_size: 384MB
+odyssai_pg_max_connections: 50
+# Database and role names are not secrets, and they are identical on both
+# copies — each instance is a server of its own, so only the passwords have to
+# differ. Those live in vaults/odyssai.yml.
+odyssai_pg_db: odyssai
+odyssai_pg_user: odyssai
+odyssai_pg_env_file: odyssai-db.env
+odyssai_pg_dev_env_file: odyssai-db-dev.env
+
 # Keycloak — one realm per environment, both on the SSO host installed by the
 # keycloak role. The API is the only client and it is confidential; the secret
 # lives in vaults/odyssai.yml.

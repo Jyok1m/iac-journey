@@ -40,6 +40,66 @@ services:
     networks:
       - odyssai-internal
 
+  # Application database. Same split as the session store — one server per copy
+  # of the stack — with one difference: this one is published on the host
+  # loopback. Schema work, dumps and one-off queries are run from a workstation
+  # over an SSH tunnel, and there is no admin UI behind Traefik to do it with.
+  db:
+    image: {{ odyssai_pg_image }}
+    container_name: {{ odyssai_pg_container_name }}
+    restart: unless-stopped
+    # POSTGRES_* live here rather than in `environment`: an inline value would
+    # be readable in `docker inspect` by anyone in the deploy group.
+    env_file: {{ odyssai_pg_env_file }}
+    command:
+      - postgres
+      - -c
+      - shared_buffers={{ odyssai_pg_shared_buffers }}
+      - -c
+      - effective_cache_size={{ odyssai_pg_effective_cache_size }}
+      - -c
+      - max_connections={{ odyssai_pg_max_connections }}
+    volumes:
+      # The whole /var/lib/postgresql, not .../data: since 18 the image keeps
+      # PGDATA one level down, in a version-named directory, and that is the
+      # path its own VOLUME declares.
+      - db-data:/var/lib/postgresql
+    # Loopback only. 5432 is never opened in ufw and the interface is not
+    # routable, so reaching it from outside the host means an SSH tunnel.
+    ports:
+      - "127.0.0.1:{{ odyssai_pg_port_host }}:{{ odyssai_pg_port }}/tcp"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ odyssai_pg_memory }}
+        reservations:
+          memory: 256M
+    # Credentials read back out of the container's own environment rather than
+    # repeated here, for the same reason env_file exists above.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # The image's STOPSIGNAL is SIGINT — a fast shutdown, which still has to
+    # flush its buffers and write a checkpoint. The default 10s grace would cut
+    # that short with a SIGKILL and turn every redeploy into a crash recovery.
+    stop_grace_period: 1m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # odyssai-internal is declared internal, so a port published through it
+    # alone would never be reachable: the bridge has no route to the host.
+    # odyssai-db-host is the plain bridge that makes the loopback binding above
+    # work, and it is also this container's only way out.
+    networks:
+      - odyssai-internal
+      - odyssai-db-host
+
   api:
     image: {{ odyssai_api_image }}
     container_name: {{ odyssai_api_container_name }}
@@ -52,10 +112,12 @@ services:
       PORT: "{{ odyssai_api_port }}"
       NODE_OPTIONS: --max-old-space-size={{ odyssai_api_heap_mb }}
     # Health gate, unlike the front's: the API validates its config and opens
-    # its Redis connection at boot, so starting it before the store is up would
-    # only produce a crash loop.
+    # its Redis and Postgres connections at boot, so starting it before the two
+    # stores are up would only produce a crash loop.
     depends_on:
       redis:
+        condition: service_healthy
+      db:
         condition: service_healthy
     deploy:
       resources:
@@ -206,6 +268,47 @@ services:
     networks:
       - odyssai-internal-dev
 
+  db-dev:
+    image: {{ odyssai_pg_image }}
+    container_name: {{ odyssai_pg_dev_container_name }}
+    restart: unless-stopped
+    env_file: {{ odyssai_pg_dev_env_file }}
+    command:
+      - postgres
+      - -c
+      - shared_buffers={{ odyssai_pg_shared_buffers }}
+      - -c
+      - effective_cache_size={{ odyssai_pg_effective_cache_size }}
+      - -c
+      - max_connections={{ odyssai_pg_max_connections }}
+    volumes:
+      - db-dev-data:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:{{ odyssai_pg_port_host_dev }}:{{ odyssai_pg_port }}/tcp"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ odyssai_pg_memory }}
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 1m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # No companion bridge here: odyssai-internal-dev is already a plain one,
+    # which is what lets redis-dev publish its own port just below.
+    networks:
+      - odyssai-internal-dev
+
   api-dev:
     image: {{ odyssai_api_dev_image }}
     container_name: {{ odyssai_api_dev_container_name }}
@@ -220,6 +323,8 @@ services:
       NODE_OPTIONS: --max-old-space-size={{ odyssai_api_heap_mb }}
     depends_on:
       redis-dev:
+        condition: service_healthy
+      db-dev:
         condition: service_healthy
     deploy:
       resources:
@@ -312,9 +417,13 @@ services:
 volumes:
   redis-data:
     name: {{ odyssai_app_name }}-redis-data
+  db-data:
+    name: {{ odyssai_app_name }}-db-data
 {% if odyssai_dev_enabled | bool %}
   redis-dev-data:
     name: {{ odyssai_app_name }}-redis-dev-data
+  db-dev-data:
+    name: {{ odyssai_app_name }}-db-dev-data
 {% endif %}
 
 # Compose stamps every network it creates with the key used to declare it and
@@ -324,6 +433,10 @@ networks:
   odyssai-internal:
     name: {{ odyssai_app_name }}-internal
     internal: true
+  # Exists only so the production database can publish a port on the host:
+  # an internal bridge has no route to it. Nothing else joins this network.
+  odyssai-db-host:
+    name: {{ odyssai_app_name }}-db-host
   traefik-public:
     name: traefik-public
     external: true

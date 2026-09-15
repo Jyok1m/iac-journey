@@ -12,6 +12,8 @@ odyssai_api_env_prod:
   keycloak_client_secret: "{{ odyssai_vault_keycloak_client_secret }}"
   redis_host: "{{ odyssai_redis_container_name }}"
   redis_password: "{{ odyssai_vault_redis_password }}"
+  pg_host: "{{ odyssai_pg_container_name }}"
+  pg_password: "{{ odyssai_vault_pg_password }}"
 
 odyssai_api_env_dev:
   file: "{{ odyssai_api_dev_env_file }}"
@@ -21,6 +23,8 @@ odyssai_api_env_dev:
   keycloak_client_secret: "{{ odyssai_vault_keycloak_dev_client_secret }}"
   redis_host: "{{ odyssai_redis_dev_container_name }}"
   redis_password: "{{ odyssai_vault_redis_dev_password }}"
+  pg_host: "{{ odyssai_pg_dev_container_name }}"
+  pg_password: "{{ odyssai_vault_pg_dev_password }}"
 
 odyssai_api_env_targets: >-
   {{ [odyssai_api_env_prod]
@@ -37,3 +41,15 @@ odyssai_redis_conf_dev:
 odyssai_redis_conf_targets: >-
   {{ [odyssai_redis_conf_prod]
      + ([odyssai_redis_conf_dev] if odyssai_dev_enabled | bool else []) }}
+
+odyssai_pg_env_prod:
+  file: "{{ odyssai_pg_env_file }}"
+  pg_password: "{{ odyssai_vault_pg_password }}"
+
+odyssai_pg_env_dev:
+  file: "{{ odyssai_pg_dev_env_file }}"
+  pg_password: "{{ odyssai_vault_pg_dev_password }}"
+
+odyssai_pg_env_targets: >-
+  {{ [odyssai_pg_env_prod]
+     + ([odyssai_pg_env_dev] if odyssai_dev_enabled | bool else []) }}

@@ -27,6 +27,24 @@
     keycloak_client_secret: "{{ item.keycloak_client_secret }}"
     redis_host: "{{ item.redis_host }}"
     redis_password: "{{ item.redis_password }}"
+    pg_host: "{{ item.pg_host }}"
+    pg_password: "{{ item.pg_password }}"
+  no_log: true
+
+# Same treatment for the two database servers: POSTGRES_PASSWORD is a secret,
+# and it is read from the container's environment rather than written into the
+# compose file, where `docker inspect` would hand it to anyone in the deploy
+# group. No handler either — env_file is part of the service config hash.
+- name: Deploy database env files
+  ansible.builtin.template:
+    src: odyssai-db.env.j2
+    dest: "{{ odyssai_app_dir }}/{{ item.file }}"
+    owner: root
+    group: "{{ odyssai_deploy_group }}"
+    mode: "0640"
+  loop: "{{ odyssai_pg_env_targets }}"
+  vars:
+    pg_password: "{{ item.pg_password }}"
   no_log: true
 
 # Redis reads its password from this file rather than from an argument, so it
