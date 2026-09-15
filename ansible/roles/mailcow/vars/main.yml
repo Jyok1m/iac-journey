@@ -1,13 +1,8 @@
 ---
-# Everything here is DERIVED from mailcow_domains in defaults/main.yml, which
-# is why it lives in vars/ and not in defaults/: these are not knobs, and a
-# host_vars override of one of them would silently disagree with the domain
-# list the rest of the role — and terraform — work from.
-#
-# The lists that need a per-domain loop are built by rendering a YAML fragment
-# and parsing it back. Jinja has no comprehension, so the alternative is a
-# chain of product/map/join that nobody can read six months later, or a flat
-# list repeated once per domain that drifts the first time a domain is added.
+# Derived from mailcow_domains, hence vars/ and not defaults/: a host_vars
+# override here would silently disagree with the domain list terraform uses.
+# The per-domain lists are a rendered YAML fragment parsed back — Jinja has no
+# comprehension, and the product/map/join chain is unreadable.
 
 mailcow_domain_names: >-
   {{ mailcow_domains | map(attribute='name') | list }}
@@ -18,18 +13,15 @@ mailcow_client_autoconfig_domains: >-
 mailcow_mta_sts_domains: >-
   {{ mailcow_domains | selectattr('mta_sts') | map(attribute='name') | list }}
 
-# Names Traefik routes to mailcow besides the hostname. mailcow's nginx answers
-# with the wrong site for a server_name it does not know, so every one of these
-# has to appear in ADDITIONAL_SERVER_NAMES too — and every one of them becomes
-# a certificate Traefik has to keep renewing, which is the whole reason
-# client_autoconfig is a per-domain switch.
+# mailcow's nginx answers with the wrong site for a server_name it does not
+# know, so each of these must be in ADDITIONAL_SERVER_NAMES too — and each is
+# one more certificate to renew, hence the per-domain switch.
 mailcow_additional_server_names: >-
   {{ (['autodiscover', 'autoconfig'] | product(mailcow_client_autoconfig_domains) | map('join', '.') | list)
      + (['mta-sts'] | product(mailcow_mta_sts_domains) | map('join', '.') | list) }}
 
-# Checked against a public resolver before the stack is allowed to come up.
-# Deliberately not the whole record set — these are the ones ACME and mail
-# delivery genuinely cannot start without.
+# Checked against a public resolver before the stack comes up: only the ones
+# ACME and delivery cannot start without.
 mailcow_dns_required_records: >-
   {{ _mailcow_dns_required_yaml | from_yaml }}
 
@@ -48,8 +40,7 @@ _mailcow_dns_required_yaml: |
   - {name: "mta-sts.{{ d }}", type: CNAME}
   {% endfor %}
 
-# Checked at the end of a run but not before it — these only exist once mailcow
-# has generated the key and started serving the policy.
+# Checked at the end of a run only: they do not exist before it.
 mailcow_dns_verify_extra: >-
   {{ _mailcow_dns_verify_extra_yaml | from_yaml }}
 
@@ -59,16 +50,10 @@ _mailcow_dns_verify_extra_yaml: |
   - {name: "{{ mailcow_dkim_selector }}._domainkey.{{ d }}", type: TXT}
   {% endfor %}
 
-# Each of these hosts answers on a specific path, not on /. autodiscover and
-# autoconfig return 404 at the root by design, so checking / would report a
-# working deployment as broken.
-#
-# mta-sts is deliberately NOT in this list. This mailcow build does not serve
-# /.well-known/mta-sts.txt at all — it answers 404 on every domain, including
-# one that has been up for months — so asserting on it would fail a deployment
-# that is working exactly as designed. The policy is gated on a live 200 in
-# tf_vars.yml, which is what keeps the TXT unpublished rather than pointing
-# senders at a 404, and verify.yml reports the state instead of failing on it.
+# Specific paths, not /: autodiscover and autoconfig 404 at the root by design.
+# mta-sts is deliberately absent — this build does not serve the policy at all,
+# so asserting on it would fail a working deployment. tf_vars.yml gates the TXT
+# on a live 200 instead, and verify.yml reports rather than fails.
 mailcow_http_checks: >-
   {{ _mailcow_http_checks_yaml | from_yaml }}
 

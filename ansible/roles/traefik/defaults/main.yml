@@ -1,39 +1,23 @@
 ---
-# Default Role
 traefik_app_name: traefik
 traefik_app_dir: /opt/{{ traefik_app_name }}
-# acme.json lives outside the stack directory: certificates must survive a
-# `compose down -v` on the proxy.
+# Outside the stack directory: certificates must survive a `compose down -v`.
 traefik_data_dir: /var/lib/{{ traefik_app_name }}
 
-# Service Traefik
 traefik_image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
 traefik_container_name: traefik
 traefik_acme_email: joachim.jasmin-dev@proton.me
 # Scraped by Prometheus over traefik-public.
 traefik_metrics_port: 8082
 
-# This role owns the traefik-public network. Every other stack declares it
-# `external: true` and only attaches to it, which is why traefik has to be
-# deployed before them.
+# This role owns the network; every other stack declares it external and has to
+# be deployed after traefik.
 traefik_public_network: traefik-public
 
-# Names that resolve to traefik from inside traefik-public.
-#
-# Every public name of this host is proxied by Cloudflare, so a container
-# calling one leaves the server, reaches the edge and comes back, when
-# Cloudflare lets it through at all: its bot protection judges the client's TLS
-# signature and readily hands a hosting IP a 403 code 1010. The keycloak role
-# already hit this and pinned the SSO name to the loopback in /etc/hosts, which
-# fixes the host and nothing else. Containers have their own resolution and
-# never read that file.
-#
-# A network alias is the same fix for them. The name resolves straight to
-# traefik over traefik-public, SNI and the Host header stay the public name,
-# and the certificate is the one traefik already holds. Nothing is weakened at
-# the edge, and it saves a public round trip for an internal call.
-#
-# Only containers attached to traefik-public see these aliases. The odyssai API
-# and komodo both speak OIDC to the SSO, and both are.
+# Names that resolve straight to traefik from inside traefik-public, instead of
+# leaving the host for the Cloudflare edge and coming back — which also earns a
+# 403 code 1010 when its bot protection judges the TLS signature of a hosting
+# IP. SNI and Host stay the public name, so the certificate still matches.
+# Only containers attached to traefik-public see these.
 traefik_internal_aliases:
   - sso.{{ portfolio_domain_com }}

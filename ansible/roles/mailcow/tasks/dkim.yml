@@ -1,12 +1,8 @@
 ---
-# The second DNS pass, and the reason the DNS work is split in two. A DKIM key
-# does not exist until mailcow has generated it for the domain, which cannot
-# happen before the stack is running — so it cannot be part of the pass that
-# has to precede the stack coming up.
-#
-# tf_vars.yml re-reads the current state rather than assuming this pass is the
-# one that introduces the keys, which is what lets the same include run on a
-# steady-state re-run and plan nothing.
+# The second DNS pass, and the reason the work is split in two: a DKIM key does
+# not exist until mailcow has generated it, which needs the stack running.
+# tf_vars.yml re-reads the current state rather than assuming this pass
+# introduces the keys, so a steady-state re-run plans nothing.
 
 - name: Re-read what terraform can know now that mailcow is up
   ansible.builtin.import_tasks: tf_vars.yml
@@ -37,8 +33,7 @@
       - "{{ mailcow_dkim_selector }}._domainkey.{{ item.1 }}"
       - TXT
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
+  # A task-level `become: false` loses to ansible_become when delegated.
   vars:
     ansible_become: false
   run_once: true
@@ -51,14 +46,10 @@
   loop_control:
     label: "{{ item.1 }} @{{ item.0 }}"
 
-# mailcow signs with the key it holds; DNS advertises the key terraform
-# published. If a rebuild regenerated a key without the DNS pass running, every
-# signature for that domain would fail to verify while looking perfectly
-# configured — and with three domains sharing one selector, the one that broke
-# would not be obvious. Both sides are normalised the same way before
-# comparing: a 2048-bit key is split across several quoted character-strings,
-# and dig re-quotes them on the way out, so the quoting differs on each side
-# while the key does not.
+# mailcow signs with the key it holds, DNS advertises the one terraform
+# published: a regenerated key without a DNS pass fails every signature while
+# looking perfectly configured. Both sides are normalised first — the key is
+# split across quoted strings and dig re-quotes them on the way out.
 - name: Confirm each published key is the one mailcow signs with
   ansible.builtin.assert:
     that:

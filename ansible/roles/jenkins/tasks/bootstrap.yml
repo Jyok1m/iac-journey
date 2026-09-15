@@ -1,8 +1,7 @@
 ---
-# Everything below is first-run setup that has to happen inside the running
-# container: Jenkins needs to reach GitHub over SSH, and to deploy onto this
-# very host through the docker gateway. Each step is guarded by a check so a
-# routine run is a no-op.
+# First-run setup inside the running container: Jenkins reaches GitHub over
+# SSH and deploys onto this host through the docker gateway. Each step is
+# guarded, so a routine run is a no-op.
 
 - name: Check for the Jenkins known_hosts file
   community.docker.docker_container_exec:
@@ -39,8 +38,8 @@
   failed_when: false
   changed_when: false
 
-# The private key is generated inside the container and never leaves it; only
-# the public half is read back out and authorized on the host.
+# The private key never leaves the container; only the public half is read
+# back out and authorized on the host.
 - name: Generate the Jenkins deploy keypair
   community.docker.docker_container_exec:
     container: "{{ jenkins_gui_container_name }}"
@@ -65,8 +64,8 @@
     key: "{{ jenkins_deploy_pub_key.stdout }}"
     state: present
 
-# From inside jenkins-internal, the host answers on the network's gateway
-# address, which Docker assigns and which is not knowable ahead of time.
+# The host answers on the network's gateway address, which Docker assigns and
+# which is not knowable ahead of time.
 - name: Inspect the jenkins-internal network
   community.docker.docker_network_info:
     name: jenkins-internal

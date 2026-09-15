@@ -13,8 +13,8 @@ services:
           memory: 128M
     command:
       - "--api.dashboard=true"
-      # No dashboard router is declared, so the API stays unreachable from
-      # outside the container. Turning this on would publish it unauthenticated.
+      # No dashboard router, so the API stays inside the container. Turning
+      # this on would publish it unauthenticated.
       - "--api.insecure=false"
       - "--ping=true"
       - "--providers.docker=true"
@@ -36,16 +36,15 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    # Larger than the other stacks on purpose: this is the access log for every
-    # request reaching the host.
+    # Larger than the other stacks: this is the access log for every request
+    # reaching the host.
     logging:
       driver: json-file
       options:
         max-size: "100m"
         max-file: "5"
     volumes:
-      # Read-only: Traefik only needs to watch container events, never to act
-      # on the daemon.
+      # Traefik only watches container events, it never acts on the daemon.
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - "{{ traefik_data_dir }}/acme.json:/acme.json"
     ports:

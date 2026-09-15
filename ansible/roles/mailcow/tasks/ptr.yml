@@ -1,15 +1,13 @@
 ---
-# Neither Ansible nor Terraform can set a reverse record — it is delegated to
-# whoever owns the IP block, which here is OVH. So this checks and refuses,
-# loudly, with the exact click path, rather than building a mail server whose
-# every message lands in spam for a reason nothing in the logs explains.
+# A reverse record belongs to whoever owns the IP block — OVH here — so this
+# checks and refuses with the click path, rather than building a mail server
+# whose every message lands in spam for a reason nothing in the logs explains.
 
 - name: Resolve the reverse record for the IPv4 address
   ansible.builtin.command:
     argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", -x, "{{ mailcow_server_ipv4 }}"]
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
+  # A task-level `become: false` loses to ansible_become when delegated.
   vars:
     ansible_become: false
   run_once: true
@@ -20,18 +18,14 @@
   ansible.builtin.command:
     argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", -x, "{{ mailcow_server_ipv6 }}"]
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
   register: mailcow_ptr6
   changed_when: false
 
-# Every large receiver checks forward-confirmed reverse DNS. A mismatch here
-# is worth roughly a full point on mail-tester on its own, and Gmail rejects
-# IPv6 senders with no reverse using a permanent 5.7.1 that Postfix bounces
-# rather than retries.
+# Every large receiver checks forward-confirmed reverse DNS, and Gmail rejects
+# IPv6 senders with no reverse on a permanent 5.7.1 that Postfix bounces.
 - name: Assert the IPv4 reverse record matches the mail hostname
   ansible.builtin.assert:
     that:
@@ -77,9 +71,8 @@
     - mailcow_require_ptr
     - mailcow_enable_ipv6
 
-# Not fatal while outbound IPv6 is off, but it has to be visible: the AAAA is
-# published for internet.nl's reachability check, and the day IPv6 sending is
-# turned on a missing reverse becomes an immediate hard bounce.
+# Not fatal while outbound IPv6 is off, but the day it is turned on a missing
+# reverse becomes an immediate hard bounce.
 - name: Warn about a missing IPv6 reverse record
   ansible.builtin.debug:
     msg: >-

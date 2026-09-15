@@ -15,9 +15,8 @@
     group: root
     mode: "0644"
 
-# rebuild: never means the image is only built when that tag is missing, so a
-# routine run does not spend minutes reinstalling plugins. Bump
-# jenkins_image_tag to force a new build.
+# The image is only built when the tag is missing, so a routine run does not
+# spend minutes reinstalling plugins. Bump jenkins_image_tag to force one.
 - name: Build the Jenkins image
   community.docker.docker_image_build:
     name: "{{ jenkins_image_name }}"
@@ -41,7 +40,6 @@
     group: root
     mode: "0640"
 
-# Only the dind image is pulled here; the GUI image was just built locally.
 - name: Pull images
   community.docker.docker_compose_v2_pull:
     project_src: "{{ jenkins_app_dir }}"

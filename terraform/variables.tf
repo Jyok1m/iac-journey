@@ -13,9 +13,7 @@ variable "portfolio_server_ip" {
   type = string
 }
 
-# ------------------------------------------------------------------ #
-#                          Mail DNS (mailcow)                        #
-# ------------------------------------------------------------------ #
+# Mail DNS (mailcow)
 
 variable "mail_hostname" {
   type        = string
@@ -37,19 +35,15 @@ variable "mail_domains" {
     # MTA-STS policy id. Must change whenever the policy body changes.
     mta_sts_id = string
 
-    # Client autoconfiguration: the autodiscover/autoconfig CNAMEs, the SRV
-    # set and the DAV path hints. Worth publishing for a domain whose
-    # mailboxes are opened in a mail client, pure noise for a domain that only
-    # ever sends from a no-reply address.
+    # autodiscover/autoconfig CNAMEs, SRV set and DAV path hints. Pure noise
+    # for a domain that only ever sends from a no-reply address.
     client_autoconfig = optional(bool, true)
 
-    # MTA-STS: the mta-sts CNAME, and the _mta-sts TXT once mailcow actually
-    # serves the policy. Independent of client_autoconfig — this one is about
-    # how other MTAs deliver to us, not about how our own clients connect.
+    # The mta-sts CNAME, and the TXT once mailcow serves the policy. About how
+    # other MTAs deliver to us, not how our own clients connect.
     mta_sts = optional(bool, true)
 
-    # Report destinations. Both fall back to the repo-wide mailbox; override
-    # only for a domain that has to keep its own reporting.
+    # Both fall back to the repo-wide mailbox.
     dmarc_rua  = optional(string)
     tlsrpt_rua = optional(string)
   }))

@@ -1,8 +1,7 @@
 ---
-# First DNS pass. Publishes everything that does not depend on mailcow being
-# up, then blocks until a public resolver actually returns it — ACME fails
-# outright if it runs against a name that has not propagated, and the failure
-# surfaces as an opaque certificate error much later.
+# First DNS pass: publishes everything that does not depend on mailcow being
+# up, then blocks until a public resolver returns it. ACME fails outright
+# against a name that has not propagated, and does so opaquely, much later.
 
 - name: Work out what terraform can know at this point
   ansible.builtin.import_tasks: tf_vars.yml
@@ -16,8 +15,7 @@
   ansible.builtin.command:
     argv: [dig, +short, "@{{ item.0 }}", "{{ item.1.name }}", "{{ item.1.type }}"]
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
+  # A task-level `become: false` loses to ansible_become when delegated.
   vars:
     ansible_become: false
   run_once: true
@@ -34,22 +32,18 @@
   ansible.builtin.command:
     argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", "{{ mailcow_hostname }}", A]
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
   register: mailcow_a_check
   changed_when: false
-  # A single dropped UDP query would otherwise fail the whole run on a record
-  # that is demonstrably fine — which is exactly what happened once.
+  # A single dropped UDP query would otherwise fail the run on a good record.
   until: mailcow_a_check.stdout | trim | length > 0
   retries: 6
   delay: 5
 
-# A proxied record resolves to a Cloudflare edge address, which terminates
-# HTTP and speaks no SMTP. The record would look present and work for the web
-# UI while silently making the MX useless.
+# A proxied record resolves to a Cloudflare edge address, which speaks no SMTP:
+# present, working for the web UI, and silently useless as an MX.
 - name: Assert the mail host is not behind the Cloudflare proxy
   ansible.builtin.assert:
     that:

@@ -31,7 +31,7 @@ services:
       - prometheus:/prometheus
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
 {% if not monitoring_is_hub %}
-    # A leaf publishes /federate on the vRack address only, for the hub to scrape.
+    # A leaf publishes /federate on the vRack address only.
     ports:
       - "{{ vrack_ip }}:{{ monitoring_federation_port }}:9090"
 {% endif %}
@@ -49,14 +49,12 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      # Canonical host, behind basic auth
       - traefik.http.routers.prom.rule=Host(`{{ monitoring_prometheus_host }}`)
       - traefik.http.routers.prom.entrypoints=websecure
       - traefik.http.routers.prom.tls.certresolver=letsencrypt
       - traefik.http.routers.prom.service=prom
       - traefik.http.routers.prom.middlewares=prom-auth
       - traefik.http.services.prom.loadbalancer.server.port=9090
-      # Permanent redirect from the .fr to the canonical .com
       - traefik.http.routers.prom-fr.rule=Host(`{{ monitoring_prometheus_redirect_host }}`)
       - traefik.http.routers.prom-fr.entrypoints=websecure
       - traefik.http.routers.prom-fr.tls.certresolver=letsencrypt
@@ -65,8 +63,8 @@ services:
       - traefik.http.middlewares.prom-redirect.redirectregex.regex=^https?://{{ monitoring_prometheus_redirect_host | replace('.', '\\.') }}/(.*)
       - traefik.http.middlewares.prom-redirect.redirectregex.replacement=https://{{ monitoring_prometheus_host }}/$${1}
       - traefik.http.middlewares.prom-redirect.redirectregex.permanent=true
-      # Generated with `htpasswd -nbB admin '<password>'`. The bcrypt hash is
-      # full of $, which Compose would read as interpolation, hence the doubling.
+      # `htpasswd -nbB admin '<password>'`. The bcrypt hash is full of $,
+      # which Compose reads as interpolation — hence the doubling.
       - traefik.http.middlewares.prom-auth.basicauth.users={{ monitoring_vault_prometheus_basic_auth | replace('$', '$$') }}
 {% endif %}
 {% if monitoring_is_hub %}
@@ -110,13 +108,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      # Canonical host
       - traefik.http.routers.grafana.rule=Host(`{{ monitoring_grafana_host }}`)
       - traefik.http.routers.grafana.entrypoints=websecure
       - traefik.http.routers.grafana.tls.certresolver=letsencrypt
       - traefik.http.routers.grafana.service=grafana
       - traefik.http.services.grafana.loadbalancer.server.port=3000
-      # Permanent redirect from the .fr to the canonical .com
       - traefik.http.routers.grafana-fr.rule=Host(`{{ monitoring_grafana_redirect_host }}`)
       - traefik.http.routers.grafana-fr.entrypoints=websecure
       - traefik.http.routers.grafana-fr.tls.certresolver=letsencrypt
@@ -159,8 +155,8 @@ services:
     image: {{ monitoring_cadvisor_image }}
     container_name: {{ monitoring_cadvisor_container_name }}
     restart: unless-stopped
-    # cAdvisor reads cgroup and device state straight from the host; it cannot
-    # do that unprivileged. The blast radius of this container is the machine.
+    # cAdvisor cannot read cgroup and device state unprivileged. The blast
+    # radius of this container is the machine.
     privileged: true
     deploy:
       resources:

@@ -58,12 +58,10 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      # Canonical host
       - traefik.http.routers.{{ n8n_container_name }}.rule=Host(`{{ n8n_host }}`)
       - traefik.http.routers.{{ n8n_container_name }}.entrypoints=websecure
       - traefik.http.routers.{{ n8n_container_name }}.tls.certresolver=letsencrypt
       - traefik.http.services.{{ n8n_container_name }}.loadbalancer.server.port=5678
-      # Permanent redirect from the .fr to the canonical .com
       - traefik.http.routers.{{ n8n_container_name }}-redirect.rule=Host(`{{ n8n_redirect_host }}`)
       - traefik.http.routers.{{ n8n_container_name }}-redirect.entrypoints=websecure
       - traefik.http.routers.{{ n8n_container_name }}-redirect.tls.certresolver=letsencrypt

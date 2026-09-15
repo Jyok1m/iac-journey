@@ -1,7 +1,6 @@
 ---
-# Everything this role owns, rendered over the upstream checkout. The
-# upstream tree itself is never edited, so bumping mailcow_version stays a
-# clean checkout rather than a merge conflict.
+# Rendered over the upstream checkout, which is never edited — so bumping
+# mailcow_version stays a clean checkout rather than a merge conflict.
 
 - name: Render mailcow.conf
   ansible.builtin.template:
@@ -9,8 +8,8 @@
     dest: "{{ mailcow_app_dir }}/mailcow.conf"
     owner: root
     group: root
-    # Upstream chmods this to 0600 itself; matching it keeps a run from
-    # reporting a change every time update.sh has touched the tree.
+    # Matches what upstream chmods it to, so a run after update.sh reports
+    # no change.
     mode: "0600"
   no_log: true
   notify: Recreate mailcow
@@ -24,13 +23,10 @@
     mode: "0640"
   notify: Recreate mailcow
 
-# nginx refuses to start without a certificate on disk, and with
-# SKIP_LETS_ENCRYPT=y nothing inside mailcow ever creates one. Traefik will not
-# issue the real certificate until a router exists for the host, and that
-# router is a label on the nginx container — so without a placeholder the two
-# wait on each other forever. generate_config.sh solves this by seeding a
-# snake-oil certificate; this does the same thing, and certsync overwrites it
-# with the real one as soon as Traefik has it.
+# nginx will not start without a certificate, and with SKIP_LETS_ENCRYPT=y
+# nothing inside mailcow creates one — while Traefik only issues the real one
+# once the router exists, which is a label on nginx. Without this placeholder
+# the two wait on each other forever. certsync overwrites it.
 - name: Create the certificate directory
   ansible.builtin.file:
     path: "{{ mailcow_app_dir }}/data/assets/ssl"
@@ -49,13 +45,11 @@
     mode: "0644"
     force: false
 
-# creates: makes this run once and never again, so the real certificate that
-# replaces it is never overwritten on a later run.
+# creates: runs once, so the real certificate is never overwritten later.
 - name: Seed a placeholder certificate so nginx can start
   ansible.builtin.shell:
-    # umask first: the directory is 0755 and root's default umask would
-    # create the key world-readable for the moment before the chmod below.
-    # Short-lived and disposable, but there is no reason to leave the window.
+    # umask first: root's default would create the key world-readable for
+    # the moment before the chmod below.
     cmd: >-
       umask 077 && openssl req -x509 -newkey rsa:4096 -nodes -sha256 -days 365
       -keyout {{ mailcow_app_dir }}/data/assets/ssl/key.pem

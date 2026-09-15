@@ -1,8 +1,4 @@
 ---
-# ------------------------------------------------------------------ #
-#                             Host Setup                             #
-# ------------------------------------------------------------------ #
-
 - name: Prepare the host
   hosts: portfolio
   vars_files:
@@ -10,34 +6,24 @@
   roles:
     - {role: hardening, tags: [hardening]}
     - {role: vrack, tags: [vrack]}
-    # Everything downstream shells out to docker compose, and the jenkins role
-    # adds its account to the docker group, so the engine comes first.
+    # Everything downstream shells out to docker compose.
     - {role: docker, tags: [docker]}
     - {role: docker_registries, tags: [docker, registries]}
   tags: [setup]
 
-# ------------------------------------------------------------------ #
-#                                Edge                                #
-# ------------------------------------------------------------------ #
-# Traefik owns the traefik-public network that every stack below joins,
-# so it has to be up before any of them.
-
+# Traefik owns the traefik-public network every stack below joins.
 - name: Install the edge proxy
   hosts: portfolio
   roles:
     - {role: traefik, tags: [traefik]}
   tags: [edge]
 
-# ------------------------------------------------------------------ #
-#                             System Apps                            #
-# ------------------------------------------------------------------ #
-
 - name: Install system apps
   hosts: portfolio
   vars_files:
     - vaults/keycloak.yml
-    # Le role keycloak configure les realms OdyssAI, dont le SMTP : il lui faut
-    # le mot de passe des boites no-reply, qui vit dans le vault de mailcow.
+    # Le role keycloak configure le SMTP des realms OdyssAI : il lui faut le
+    # mot de passe des boites no-reply.
     - vaults/mailcow.yml
     - vaults/komodo.yml
     - vaults/monitoring.yml
@@ -48,13 +34,8 @@
     - {role: monitoring, tags: [monitoring]}
   tags: [system-apps]
 
-# ------------------------------------------------------------------ #
-#                                Mail                                #
-# ------------------------------------------------------------------ #
-# A play of its own rather than a role under system-apps: this one also
-# drives terraform on the control node, and it has to run after keycloak
-# so the OIDC client has a realm to be created in.
-
+# A play of its own: this one also drives terraform on the control node, and it
+# has to run after keycloak so the OIDC client has a realm to be created in.
 - name: Install the mail server
   hosts: portfolio
   vars_files:
@@ -63,10 +44,6 @@
   roles:
     - {role: mailcow, tags: [mailcow]}
   tags: [mail]
-
-# ------------------------------------------------------------------ #
-#                            Personal Apps                           #
-# ------------------------------------------------------------------ #
 
 - name: Install personal apps
   hosts: portfolio
@@ -80,10 +57,6 @@
     - {role: portfolio, tags: [portfolio]}
     - {role: n8n, tags: [n8n]}
   tags: [personal-apps]
-
-# ------------------------------------------------------------------ #
-#                             Client Apps                            #
-# ------------------------------------------------------------------ #
 
 - name: Install client apps
   hosts: portfolio

@@ -1,7 +1,6 @@
 ---
-# Everything here is a question that, answered wrong, makes the rest of the
-# role pointless. Each one fails with the action that fixes it rather than
-# with a stack trace three tasks later.
+# Each check fails with the action that fixes it, rather than with a stack
+# trace three tasks later.
 
 - name: Assert the vault is unlocked and complete
   ansible.builtin.assert:
@@ -20,9 +19,8 @@
       mailcow_vault_api_key and mailcow_vault_mailboxes.
     quiet: true
 
-# mailcow's API key charset is enforced by a regex in sessions.inc.php; a key
-# containing anything else is silently truncated at lookup and every API call
-# in this role returns 401 with no explanation.
+# A key with other characters is silently truncated at lookup, and every API
+# call in this role returns 401 with no explanation.
 - name: Assert the API key uses the charset mailcow accepts
   ansible.builtin.assert:
     that:
@@ -33,9 +31,7 @@
       key with other characters authenticates as nothing.
     quiet: true
 
-# Keyed by the full address, not by the local part. no-reply exists on two
-# domains here, and a local-part map would have handed them the same password
-# without anyone noticing until one of the two apps could send as the other.
+# Keyed by the full address: no-reply exists on two domains here.
 - name: Assert every mailbox has a password in the vault
   ansible.builtin.assert:
     that:
@@ -74,21 +70,16 @@
       to be a domain mailcow serves.
     quiet: true
 
-# Ansible provisions the domains inside mailcow; terraform publishes their DNS.
-# The two lists are written down separately — there is no shared source a
-# terraform tfvars file and an ansible role can both read — so they are
-# compared instead. A domain in one and not the other fails in a way that
-# looks like a working deployment: mailboxes whose mail has no MX, or an MX
-# for a domain mailcow rejects at RCPT TO, which turns this host into a
-# backscatter source.
+# The two lists have no shared source, so they are compared instead. A domain
+# in one and not the other looks like a working deployment: mailboxes with no
+# MX, or an MX for a domain mailcow rejects at RCPT TO — a backscatter source.
 - name: Read the terraform mail inputs
   ansible.builtin.set_fact:
     mailcow_tf_domains: >-
       {{ lookup('ansible.builtin.file', mailcow_terraform_dir ~ '/mail.auto.tfvars')
          | regex_findall('"([^"]+)"\s*=\s*\{') }}
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
+  # A task-level `become: false` loses to ansible_become on a delegated task.
   vars:
     ansible_become: false
   run_once: true
@@ -110,8 +101,7 @@
   register: mailcow_swarm_state
   changed_when: false
 
-# Upstream is explicit that Swarm is unsupported. Better to stop here than to
-# debug an overlay network three hours in.
+# Upstream is explicit that Swarm is unsupported.
 - name: Assert Docker is not in Swarm mode
   ansible.builtin.assert:
     that:
@@ -133,9 +123,8 @@
   failed_when: false
   when: mailcow_require_port25_egress
 
-# OVH blocks outbound 25 on some accounts and only lifts it on request. A
-# mail server that cannot open 25 outbound delivers nothing, and the failure
-# looks like a queue that never drains.
+# OVH blocks outbound 25 on some accounts and only lifts it on request. The
+# failure looks like a queue that never drains.
 - name: Assert outbound port 25 is open
   ansible.builtin.assert:
     that:
@@ -156,8 +145,7 @@
       name: "{{ mailcow_traefik_network }}"
   register: mailcow_networks
 
-# Traefik owns this network and has to exist first; mailcow attaches to it as
-# external and compose refuses to create it implicitly.
+# mailcow attaches to it as external, and compose will not create it.
 - name: Assert the Traefik network exists
   ansible.builtin.assert:
     that:
@@ -167,20 +155,14 @@
       traefik role before this one.
     quiet: true
 
-# Docker only reports an overlapping pool at network-create time, and it does
-# it as "invalid pool request: Pool overlaps with other one on this address
-# space" from inside a compose run that has already started doing work. The
-# message names neither the subnet asked for nor the network holding it.
-#
-# This is not a theoretical failure. Docker's built-in default address pool is
-# 172.17.0.0/16 through 172.31.0.0/16, one whole /16 per network, so a host
-# carrying a stack per application runs out — and a value that was free the day
-# it was written gets taken by the next role that lands. Naming the culprit up
-# front turns a twenty-minute dig into one line.
+# Docker reports an overlap only at network-create time, from inside a compose
+# run already doing work, and names neither the subnet nor the network holding
+# it. Its default pool is one /16 per network across 172.17–172.31, so a host
+# with a stack per app runs out and a free value gets taken by the next role.
 - name: Look for a docker network overlapping the pool mailcow wants
   ansible.builtin.shell:
-    # bash, not the default sh: dash has no pipefail, and without it a docker
-    # that failed would be read as "no overlap" by the python on the far side.
+    # bash: dash has no pipefail, and a failed docker would read as "no
+    # overlap" on the far side of the pipe.
     executable: /bin/bash
     cmd: |
       set -o pipefail
@@ -223,8 +205,8 @@
     path: "{{ mailcow_app_dir }}/docker-compose.yml"
   register: mailcow_existing_compose
 
-# On a re-run mailcow itself holds the mail ports, so the free-port assertion
-# below only applies to a first install.
+# On a re-run mailcow itself holds the ports, so the assertion below is for a
+# first install only.
 - name: Record whether this is a first install
   ansible.builtin.set_fact:
     mailcow_already_deployed: "{{ mailcow_existing_compose.stat.exists }}"
@@ -236,8 +218,6 @@
   changed_when: false
   when: not mailcow_already_deployed
 
-# A port already held by an unrelated stack turns compose up into a partial
-# failure that leaves half the containers running.
 - name: Assert the mail ports are free
   ansible.builtin.assert:
     that:

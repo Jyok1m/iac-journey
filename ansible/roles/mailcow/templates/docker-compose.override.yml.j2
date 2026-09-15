@@ -1,17 +1,11 @@
-# Ansible managed — do not edit manually.
-#
-# Compose merges this over the upstream docker-compose.yml, which is left
-# untouched so `git checkout` of a new tag stays a clean fast-forward.
-#
-# Two jobs: put nginx-mailcow on the Traefik network with routers for every
-# name mailcow answers to, and mount the hardened Postfix overrides.
+# Ansible managed. Merged over the upstream docker-compose.yml, which stays
+# untouched so `git checkout` of a new tag is a clean fast-forward.
 
 services:
   nginx-mailcow:
     networks:
-      # Upstream's own network has to be repeated — compose replaces the list
-      # rather than appending to it, and dropping it would cut nginx off from
-      # php-fpm.
+      # Repeated because compose replaces the list rather than appending;
+      # dropping it would cut nginx off from php-fpm.
       mailcow-network:
         aliases:
           - nginx
@@ -26,20 +20,15 @@ services:
 {% for host in [mailcow_hostname] + mailcow_additional_server_names %}
       - traefik.http.routers.mailcow.tls.domains[{{ loop.index0 }}].main={{ host }}
 {% endfor %}
-      # Plain HTTP to the container. TLS is terminated by Traefik for the web
-      # surface; the certificate Postfix and Dovecot serve is a separate
-      # concern handled by the {{ mailcow_cert_sync_unit }} unit.
+      # Traefik terminates TLS for the web surface; the certificate Postfix
+      # and Dovecot serve is the {{ mailcow_cert_sync_unit }} unit's job.
       - traefik.http.services.mailcow.loadbalancer.server.port={{ mailcow_http_port }}
       - traefik.http.services.mailcow.loadbalancer.server.scheme=http
 
-# Deliberately no volume override for postfix-mailcow. Upstream already mounts
-# the whole ./data/conf/postfix directory, so the templated extra.cf is
-# visible to the container without any help. Bind-mounting the single file on
-# top of that broke postfix.sh: it runs `sed -i` over extra.cf, sed -i writes a
-# temp file and renames it into place, and rename across a bind-mount point
-# fails with EBUSY. The dedupe step silently did nothing while the append that
-# follows it kept working, so the host name directive gained one duplicate
-# line per container start.
+# No volume override for postfix-mailcow: upstream already mounts the whole
+# ./data/conf/postfix directory. Bind-mounting the single file broke
+# postfix.sh — its `sed -i` renames a temp file into place, which fails with
+# EBUSY across a bind-mount point, so its dedupe step silently did nothing.
 
 networks:
   {{ mailcow_traefik_network }}:

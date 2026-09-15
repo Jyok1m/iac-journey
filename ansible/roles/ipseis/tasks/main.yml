@@ -9,8 +9,8 @@
     group: "{{ ipseis_deploy_group }}"
     mode: "0750"
 
-# Bind-mount sources. Docker would create them itself, but only as root-owned
-# directories at container start, which hides the ownership decision.
+# Docker would create these itself, but only as root-owned directories at
+# container start — which hides the ownership decision.
 - name: Create upload directories
   ansible.builtin.file:
     path: "{{ ipseis_app_dir }}/{{ item }}"
@@ -45,8 +45,8 @@
   community.docker.docker_compose_v2_pull:
     project_src: "{{ ipseis_app_dir }}"
 
-# recreate stays on auto: Compose already recreates a container whose image ID
-# moved, so a new :latest push bounces the API without restarting the database.
+# auto recreates a container whose image ID moved, so a new :latest push
+# bounces the API without restarting the database.
 - name: Deploy services
   community.docker.docker_compose_v2:
     project_src: "{{ ipseis_app_dir }}"

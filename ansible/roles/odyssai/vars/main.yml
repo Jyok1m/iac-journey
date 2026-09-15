@@ -1,8 +1,6 @@
 ---
-# Derived from defaults and the vault: the two copies of the stack take the
-# same templates with different realms, hosts and secrets. Kept here rather
-# than inlined in the loops so tasks/main.yml stays readable, and so the dev
-# copy disappears from every loop at once when odyssai_dev_enabled is false.
+# One entry per copy of the stack, so the dev one drops out of every loop at
+# once when odyssai_dev_enabled is false.
 
 odyssai_api_env_prod:
   file: "{{ odyssai_api_env_file }}"

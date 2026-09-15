@@ -4,9 +4,8 @@
 # Usage:
 #   sudo backup-mongo-restore-{{ backup_mongo_name }}.sh <snapshot-id|latest> [--drop] [--yes]
 #
-# Resolves the requested restic snapshot, materializes the archive locally and
-# pipes it into mongorestore against the target container. --yes skips the
-# confirmation prompt, for automated restore drills.
+# Materializes the snapshot locally and pipes it into mongorestore against the
+# target container. --yes skips the prompt, for automated restore drills.
 set -euo pipefail
 
 NAME="{{ backup_mongo_name }}"

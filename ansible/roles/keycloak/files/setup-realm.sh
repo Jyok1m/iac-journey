@@ -1,46 +1,17 @@
 #!/usr/bin/env bash
 #
-# Configure un realm OdyssAI sur Keycloak, uniquement via l'Admin REST API.
-# Idempotent : relancer le script met le realm a jour, il ne le recree pas.
+# Configure un realm OdyssAI via l'Admin REST API. Idempotent.
 #
-# Usage :
-#   KC_ADMIN_PASSWORD='...' ./infra/keycloak/setup-realm.sh odyssai-dev
+#   KC_ADMIN_CLIENT_ID=... KC_ADMIN_CLIENT_SECRET='...' $0 odyssai-prod
 #
-#   KC_ADMIN_PASSWORD='...' \
-#   API_BASE_URL=https://api.odyssai.example \
-#   WEB_BASE_URL=https://odyssai.example \
-#     ./infra/keycloak/setup-realm.sh odyssai-prod
+# Le service account est a privilegier : un compte humain protege par MFA ne
+# peut pas passer par le direct grant. Autres variables : KC_URL,
+# KC_ADMIN_REALM, API_BASE_URL, WEB_BASE_URL, API_CLIENT_ID, DISPLAY_NAME,
+# EXTRA_REDIRECT_URIS, LOGIN_THEME, SSL_REQUIRED (passer a "external" si le
+# proxy ne transmet pas X-Forwarded-Proto, sinon boucle de redirection).
 #
-# Variables d'environnement :
-#   KC_URL            (defaut: https://sso.joachimjasmin.com)
-#   KC_ADMIN_REALM    (defaut: master)
-#
-#   Deux facons de s'authentifier, dans cet ordre de preference :
-#
-#   KC_ADMIN_CLIENT_ID / KC_ADMIN_CLIENT_SECRET
-#                     service account du realm d'administration. A privilegier :
-#                     insensible au MFA, revocable, et sans identite humaine
-#                     partagee.
-#   KC_ADMIN_USER / KC_ADMIN_PASSWORD
-#                     compte humain. Echoue des que le compte porte du MFA, le
-#                     direct grant ne sachant pas presenter un second facteur.
-#   API_BASE_URL      (defaut: http://localhost:3001)  origine publique de apps/api
-#   WEB_BASE_URL      (defaut: http://localhost:3000)  origine publique de apps/web
-#   API_CLIENT_ID     (defaut: odyssai-api)
-#   DISPLAY_NAME      (defaut: OdyssAI)  nom affiche dans la console et sur les
-#                     pages de connexion. A distinguer entre environnements,
-#                     sinon rien ne dit sur quel realm on est en train d agir.
-#   EXTRA_REDIRECT_URIS  URI de redirection supplementaires, separees par des
-#                     virgules. Sert au realm de developpement, ou la machine du
-#                     developpeur doit etre acceptee a cote du domaine deploye.
-#   LOGIN_THEME       (defaut: keycloak)  passer a "odyssai" une fois le theme deploye
-#   SSL_REQUIRED      (defaut: all)  "external" si le proxy devant Keycloak ne
-#                     transmet pas X-Forwarded-Proto (sinon boucle de redirection)
-#
-# Le realm ne contient volontairement aucun client public ni aucun service
-# account : apps/api est le seul client, il est confidentiel, et il porte le
-# flot Authorization Code + PKCE. Les mots de passe ne transitent jamais par
-# l'API, ils ne sont vus que par les pages de Keycloak.
+# apps/api est le seul client, confidentiel, en Authorization Code + PKCE :
+# aucun mot de passe ne transite par l'API.
 #
 set -euo pipefail
 
@@ -53,10 +24,8 @@ KC_ADMIN_CLIENT_ID="${KC_ADMIN_CLIENT_ID:-}"
 KC_ADMIN_CLIENT_SECRET="${KC_ADMIN_CLIENT_SECRET:-}"
 API_CLIENT_ID="${API_CLIENT_ID:-odyssai-api}"
 
-# SMTP. SMTP_HOST est la variable pivot : renseignee, le realm est configure
-# pour envoyer et la verification d adresse est activee. Vide, aucun envoi
-# possible et verifyEmail reste faux, sinon un compte non verifie ne pourrait
-# plus terminer de connexion et rien ne le debloquerait.
+# SMTP_HOST est la variable pivot : vide, verifyEmail reste faux, sinon un
+# compte non verifie resterait bloque sans moyen de se debloquer.
 SMTP_HOST="${SMTP_HOST:-}"
 SMTP_PORT="${SMTP_PORT:-587}"
 SMTP_FROM="${SMTP_FROM:-}"
@@ -64,9 +33,8 @@ SMTP_FROM_NAME="${SMTP_FROM_NAME:-$DISPLAY_NAME}"
 SMTP_USER="${SMTP_USER:-$SMTP_FROM}"
 SMTP_PASSWORD="${SMTP_PASSWORD:-}"
 DISPLAY_NAME="${DISPLAY_NAME:-OdyssAI}"
-# Le theme est deploye sur le serveur par le role ansible keycloak. Repasser a
-# "keycloak" pour une instance ou il n'est pas installe : Keycloak retombe alors
-# sur ses pages par defaut sans signaler que le theme demande est introuvable.
+# Repasser a "keycloak" sur une instance sans le theme : Keycloak retombe sur
+# ses pages par defaut sans signaler que le theme est introuvable.
 LOGIN_THEME="${LOGIN_THEME:-odyssai}"
 SSL_REQUIRED="${SSL_REQUIRED:-all}"
 REALM="${1:-}"
@@ -76,17 +44,14 @@ if [[ -z "$REALM" ]]; then
   exit 2
 fi
 
-# Origines par defaut, choisies d'apres le realm vise et non d'apres la machine
-# qui lance le script. C'est le coeur du sujet : le realm de developpement sert
-# deux environnements a la fois, la copie deployee et le poste du developpeur.
-# N'en declarer qu'une efface l'autre, et la connexion casse la ou on ne
-# regardait pas. Chaque URI reste exacte, jamais un joker.
+# Origines choisies d'apres le realm vise, pas d'apres la machine qui lance le
+# script : le realm de dev sert a la fois la copie deployee et le poste du
+# developpeur. Chaque URI reste exacte, jamais un joker.
 case "$REALM" in
   *-prod)
     API_BASE_URL="${API_BASE_URL:-https://api.odyssai.app}"
     WEB_BASE_URL="${WEB_BASE_URL:-https://odyssai.app}"
-    # Rien de local ici : accepter localhost en production ferait du client le
-    # complice d'une redirection vers la machine de qui sait la demander.
+    # Pas de localhost en production.
     EXTRA_REDIRECT_URIS="${EXTRA_REDIRECT_URIS:-}"
     EXTRA_POST_LOGOUT_URIS="${EXTRA_POST_LOGOUT_URIS:-}"
     ;;
@@ -124,10 +89,8 @@ step "Authentification sur $KC_URL (realm $KC_ADMIN_REALM)"
 
 TOKEN_ENDPOINT="$KC_URL/realms/$KC_ADMIN_REALM/protocol/openid-connect/token"
 
-# Appelee au demarrage, puis rappelee apres la creation d'un realm : Keycloak
-# publie alors un client <realm>-realm portant les droits d'administration de
-# ce realm, et les ajoute au role composite de l'appelant. Un jeton emis avant
-# ne les porte pas, et tout ce qui suit repondrait 403.
+# Rappelee apres la creation d'un realm : les droits sur le nouveau realm ne
+# sont pas dans un jeton emis avant, et tout ce qui suit repondrait 403.
 authenticate() {
 if [[ -n "$KC_ADMIN_CLIENT_SECRET" ]]; then
   AUTH_MODE="service account $KC_ADMIN_CLIENT_ID"
@@ -161,9 +124,8 @@ fi
 authenticate
 log "authentifie par $AUTH_MODE"
 
-# api <METHODE> <CHEMIN> [CORPS_JSON] : renseigne HTTP_CODE et RESP_BODY.
-# Volontairement sans sortie standard : une substitution de commande creerait
-# un sous-shell et les deux variables seraient perdues au retour.
+# api <METHODE> <CHEMIN> [CORPS] : renseigne HTTP_CODE et RESP_BODY. Sans
+# sortie standard — une substitution de commande perdrait les deux variables.
 HTTP_CODE=""
 RESP_BODY=""
 LAST_CALL=""
@@ -178,7 +140,6 @@ api() {
   RESP_BODY="${out%$'\n'*}"
 }
 
-# Arrete le script si le dernier appel n'a pas rendu un des codes attendus.
 expect() {
   if [[ " $1 " != *" $HTTP_CODE "* ]]; then
     echo "echec sur $LAST_CALL (HTTP $HTTP_CODE) : $RESP_BODY" >&2
@@ -190,8 +151,7 @@ expect() {
 
 step "Realm $REALM"
 
-# Keycloak veut toutes les valeurs de smtpServer en chaines, port et booleens
-# compris : un entier ou un vrai booleen y est refuse.
+# smtpServer n'accepte que des chaines, port et booleens compris.
 if [[ -n "$SMTP_HOST" ]]; then
   SMTP_CONFIG="$(jq -n \
     --arg host "$SMTP_HOST" --arg port "$SMTP_PORT" \
@@ -221,9 +181,6 @@ REALM_CONFIG="$(jq -n \
   realm: $realm,
   displayName: $display,
   enabled: true,
-
-  # Inscription et connexion sont servies par Keycloak : c est ce qui permet a
-  # apps/api de ne jamais manipuler de mot de passe.
   registrationAllowed: true,
   registrationEmailAsUsername: true,
   loginWithEmailAllowed: true,
@@ -232,15 +189,13 @@ REALM_CONFIG="$(jq -n \
   resetPasswordAllowed: true,
   rememberMe: true,
 
-  # Suit la presence d un SMTP, jamais force : activer la verification sans
-  # serveur d envoi enfermerait dehors tout compte cree ensuite.
+  # Jamais force : la verification sans SMTP enfermerait dehors tout compte
+  # cree ensuite.
   verifyEmail: $verify,
   smtpServer: $smtp,
 
   loginTheme: $theme,
   sslRequired: $ssl,
-
-  # Les pages de Keycloak suivent les locales de apps/web.
   internationalizationEnabled: true,
   supportedLocales: ["fr", "en"],
   defaultLocale: "fr",
@@ -262,8 +217,7 @@ REALM_CONFIG="$(jq -n \
   ssoSessionIdleTimeoutRememberMe: 172800,
   ssoSessionMaxLifespanRememberMe: 2592000,
 
-  # Rotation stricte : un refresh token ne sert qu une fois. Un rejeu signale
-  # un vol de token et invalide la session.
+  # Un refresh token ne sert qu une fois : un rejeu invalide la session.
   revokeRefreshToken: true,
   refreshTokenMaxReuse: 0,
 
@@ -292,10 +246,8 @@ fi
 
 step "Profil utilisateur (formulaire d inscription reduit)"
 
-# firstName et lastName restent declares pour ne pas casser la console compte,
-# mais deviennent invisibles et non modifiables cote utilisateur : le formulaire
-# d inscription se limite a l email et au mot de passe. Le pseudo de joueur
-# releve du profil de jeu, pas de l identite, il ira en base applicative.
+# firstName et lastName restent declares pour la console compte, mais masques :
+# l inscription se limite a l email et au mot de passe.
 USER_PROFILE="$(jq -n '{
   attributes: [
     {
@@ -313,8 +265,7 @@ USER_PROFILE="$(jq -n '{
       name: "email",
       displayName: "${email}",
       validations: { email: {}, length: { max: 255 } },
-      # Sans cette annotation le formulaire d inscription rend un input text :
-      # pas de clavier courriel sur mobile, pas de validation native.
+      # Sans ca, l inscription rend un input text : pas de clavier courriel.
       annotations: { inputType: "email" },
       required: { roles: ["user"] },
       permissions: { view: ["admin", "user"], edit: ["admin", "user"] },
@@ -342,9 +293,7 @@ USER_PROFILE="$(jq -n '{
       displayDescription: "Attributes, which refer to user metadata"
     }
   ]
-  # Pas de unmanagedAttributePolicy : son absence est deja la politique la
-  # plus stricte. L enumeration ne connait que ENABLED, ADMIN_VIEW et
-  # ADMIN_EDIT, toute autre valeur fait echouer la desserialisation.
+  # Pas de unmanagedAttributePolicy : son absence est deja la plus stricte.
 }')"
 
 api PUT "/admin/realms/$REALM/users/profile" "$USER_PROFILE"
@@ -388,8 +337,6 @@ fi
 
 step "Client $API_CLIENT_ID"
 
-# Chaque URI reste exacte, sans caractere joker : un joker rendrait le client
-# complice de toute redirection sous le domaine.
 REDIRECT_URIS="$(jq -n \
   --arg main "$API_BASE_URL/auth/callback" \
   --arg extra "$EXTRA_REDIRECT_URIS" '
@@ -397,16 +344,12 @@ REDIRECT_URIS="$(jq -n \
     | unique')"
 log "redirect_uri : $(jq -r 'join(", ")' <<<"$REDIRECT_URIS")"
 
-# Keycloak separe ces URI par ## et non par une virgule. On garde le domaine
-# avec et sans barre finale : le navigateur peut presenter l'une ou l'autre et
-# la comparaison est exacte.
+# Separees par ## et non par une virgule.
 POST_LOGOUT_URIS="$(jq -rn \
   --arg web "$WEB_BASE_URL" \
   --arg extra "$EXTRA_POST_LOGOUT_URIS" '
-    # Chaque origine est declaree avec et sans barre finale. Keycloak compare
-    # ces URI a l identique, et une URL normalisee par le client porte la barre
-    # que la forme ecrite ici n a pas : apps/api construit la sienne avec
-    # new URL(...).toString(), qui ajoute la barre sur une origine nue.
+    # Avec et sans barre finale : la comparaison est exacte, et
+    # new URL(...).toString() cote apps/api ajoute la barre.
     def variants: rtrimstr("/") | [., . + "/"];
     ([$web] + ($extra | split(",") | map(select(length > 0))))
     | map(variants) | flatten | unique | join("##")')"
@@ -421,13 +364,10 @@ CLIENT_CONFIG="$(jq -n \
   name: "OdyssAI API",
   enabled: true,
   protocol: "openid-connect",
-
-  # Client confidentiel : le secret ne quitte jamais apps/api.
   publicClient: false,
   standardFlowEnabled: true,
 
-  # Tout le reste est coupe. Notamment le direct grant, qui ferait transiter
-  # les mots de passe par l API et que OAuth 2.1 retire.
+  # Le direct grant ferait transiter les mots de passe par l API.
   directAccessGrantsEnabled: false,
   implicitFlowEnabled: false,
   serviceAccountsEnabled: false,
@@ -435,16 +375,13 @@ CLIENT_CONFIG="$(jq -n \
   redirectUris: $redirect,
   webOrigins: [],
   rootUrl: "",
-  # Le front de ce client, et d un seul. C est lui que Keycloak propose comme
-  # retour vers le site quand il a perdu le contexte, au bout d un lien de
-  # verification d adresse par exemple. Un client par environnement est ce qui
-  # rend cette valeur juste : partagee, elle renvoyait sur le mauvais front.
+  # Le retour propose quand Keycloak a perdu le contexte, au bout d un lien
+  # de verification par exemple. Un client par environnement, donc.
   baseUrl: $web,
 
   frontchannelLogout: false,
   attributes: {
-    # PKCE obligatoire meme sur un client confidentiel : defense en profondeur
-    # exigee par OAuth 2.1, elle bloque l interception du code d autorisation.
+    # PKCE meme sur un client confidentiel, exige par OAuth 2.1.
     "pkce.code.challenge.method": "S256",
     "post.logout.redirect.uris": $postLogout,
     "backchannel.logout.session.required": "true",
@@ -455,8 +392,7 @@ CLIENT_CONFIG="$(jq -n \
 
 api GET "/admin/realms/$REALM/clients?clientId=$API_CLIENT_ID"
 expect "200"
-# Pas de -e ici : jq sort en 4 quand le filtre ne produit rien, ce qui tuerait
-# le script alors que "client absent" est un cas nominal.
+# Pas de -e : jq sort en 4 sur un filtre vide, et "client absent" est nominal.
 CLIENT_UUID="$(jq -r '.[0].id // empty' <<<"$RESP_BODY")"
 
 if [[ -n "$CLIENT_UUID" ]]; then
@@ -472,8 +408,7 @@ else
   log "client cree"
 fi
 
-# Sans ce mapper, l access token ne porte pas odyssai-api dans aud et la
-# verification d audience cote API rejette tous les jetons.
+# Sans ce mapper, aud ne porte pas odyssai-api et l API rejette tout jeton.
 api GET "/admin/realms/$REALM/clients/$CLIENT_UUID/protocol-mappers/models"
 expect "200"
 if ! jq -e 'any(.[]; .name == "odyssai-api-audience")' <<<"$RESP_BODY" >/dev/null; then

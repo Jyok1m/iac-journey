@@ -1,29 +1,21 @@
 # {{ ansible_managed }}
 #
-# Password in a file rather than on the command line: an argument stays visible
-# in `docker inspect` and in the host's process table for the life of the
-# container.
+# In a file, not on the command line: an argument stays visible in
+# `docker inspect` and in the host's process table.
 requirepass {{ redis_password }}
 
-# Sessions must survive a restart of the stack: losing the store would sign out
-# every player at once. everysec trades at most one second of writes for the
-# throughput fsync-per-write would cost.
+# Sessions must survive a restart. everysec risks one second of writes.
 appendonly yes
 appendfsync everysec
 
-# Every key the API writes carries a TTL, so volatile-ttl always has something
-# to evict and reaching the ceiling degrades the oldest sessions instead of
-# failing new logins.
+# Every key carries a TTL, so hitting the ceiling drops the oldest sessions
+# instead of failing new logins.
 maxmemory {{ odyssai_redis_maxmemory }}
 maxmemory-policy volatile-ttl
 
-# The container is only on an internal compose network, but binding wide and
-# trusting the network alone would leave nothing between a misrouted publish
-# and the store. protected-mode stays on, and the password is required either
-# way.
+# Second lock behind the internal network, in case of a misrouted publish.
 protected-mode yes
 
-# Commands that would let anything holding the password reshape the server.
 # The API only ever reads and writes keys.
 rename-command CONFIG ""
 rename-command FLUSHALL ""

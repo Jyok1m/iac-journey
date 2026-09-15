@@ -33,9 +33,8 @@
     project_src: "{{ heirloom_app_dir }}"
   register: heirloom_docker_compose_pull
 
-# The database must be converged before the migration runs: `compose run` only
-# manages the dependencies of `migrate`, so it cannot reconcile a drifted
-# network while the other services still hold endpoints on it.
+# `compose run` only manages the dependencies of `migrate`, so it cannot
+# reconcile a drifted network while the other services hold endpoints on it.
 - name: Deploy database
   community.docker.docker_compose_v2:
     project_src: "{{ heirloom_app_dir }}"
@@ -45,11 +44,9 @@
     wait: true
     wait_timeout: 120
 
-# The image runs `prisma migrate deploy`, which is idempotent: it exits 0 with
-# "No pending migrations to apply." when the schema is already current. Parsing
-# that keeps the play honest instead of reporting a change on every run.
-# Left skipped under --check (the default for `command`): a dry run must not
-# migrate the production database.
+# `prisma migrate deploy` is idempotent and says so on stdout, which is what
+# keeps this from reporting a change on every run. Skipped under --check: a
+# dry run must not migrate the production database.
 - name: Run migrations
   ansible.builtin.command:
     cmd: docker compose --project-directory {{ heirloom_app_dir }} run --rm --no-deps migrate

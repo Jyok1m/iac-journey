@@ -1,12 +1,10 @@
 ---
-# Sends one real message from a real mailbox on the server, so deliverability
-# can be scored by an outside judge rather than asserted here.
+# Sends one real message so deliverability is scored by an outside judge.
 #
 #   ansible-playbook ansible/mail-test.yml -e mail_test_to=test-xxxx@srv1.mail-tester.com
 #
-# Submission goes through port 587 with SASL exactly as a mail client would,
-# rather than by dropping a file in the queue — that way the message travels
-# the same path a real one does, and is signed, aligned and queued identically.
+# Through 587 with SASL as a mail client would, not by dropping a file in the
+# queue: the message is signed, aligned and queued exactly like a real one.
 
 - name: Send a deliverability test message
   hosts: portfolio
@@ -14,9 +12,7 @@
   vars_files:
     - vaults/mailcow.yml
   vars:
-    # The vault map is keyed by the full address, not by the local part —
-    # no-reply exists on more than one domain. Overriding mail_test_from with
-    # -e is enough to test any mailbox; nothing else here names the local part.
+    # Keyed by full address: no-reply exists on more than one domain.
     mail_test_from: "info@{{ portfolio_domain_com }}"
   tasks:
     - name: Require a destination
@@ -29,13 +25,11 @@
           -e mail_test_to=test-xxxx@srv1.mail-tester.com
         quiet: true
 
-    # always: rather than a plain following task. A failed send — wrong
-    # password, Postfix down, 587 closed — would otherwise end the play with
-    # the mailbox password still sitting on disk.
+    # always: a failed send would otherwise end the play with the mailbox
+    # password still sitting on disk.
     - name: Send a test message
       block:
-        # Written out rather than passed as an argument so the credential
-        # never appears in a process listing on the host.
+        # Not an argument: that would show in the host's process listing.
         - name: Stage the sender
           ansible.builtin.copy:
             content: |

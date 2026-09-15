@@ -1,16 +1,8 @@
 ---
-# One guarded terraform pass. Included more than once per run — first for the
-# records the stack needs to come up, later for the DKIM key that cannot
-# exist until it has. Callers set mailcow_tf_purpose; the values that
-# vary are written to mail.generated.auto.tfvars by tf_vars.yml.
-#
-# The guardrail is the point of this file: capture a plan, read it back,
-# refuse anything that is not a pure create or update, and only then apply
-# that exact saved plan. Nothing here ever applies against live config, and
-# nothing is ever auto-approved unread.
-#
-# Everything runs on the control node. The state backend credentials and the
-# Cloudflare token live there and are never copied to the managed host.
+# One guarded terraform pass, included more than once per run. The guardrail is
+# the point: capture a plan, read it back, refuse anything that is not a pure
+# create or update, and apply that exact saved plan — never live config, never
+# auto-approved unread. Runs on the control node, which holds the credentials.
 
 - name: "Initialise terraform ({{ mailcow_tf_purpose }})"
   ansible.builtin.command:
@@ -21,8 +13,7 @@
       - -backend-config={{ mailcow_terraform_backend_config }}
     chdir: "{{ mailcow_terraform_dir }}"
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
+  # A task-level `become: false` loses to ansible_become when delegated.
   vars:
     ansible_become: false
   run_once: true
@@ -33,8 +24,6 @@
     argv: [terraform, plan, -input=false, -detailed-exitcode, -no-color, "-out={{ mailcow_tf_plan_file }}"]
     chdir: "{{ mailcow_terraform_dir }}"
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
@@ -48,8 +37,6 @@
     argv: [terraform, show, -json, "{{ mailcow_tf_plan_file }}"]
     chdir: "{{ mailcow_terraform_dir }}"
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
@@ -57,9 +44,8 @@
   changed_when: false
   when: mailcow_tf_plan.rc == 2
 
-# A bare delete is a destroy; a delete paired with a create is a replace.
-# Both mean an existing record is about to be rewritten, which the brief
-# treats as a failure rather than a detail.
+# A bare delete is a destroy, a delete with a create is a replace. Both mean an
+# existing record is about to be rewritten.
 - name: "Sort the planned actions ({{ mailcow_tf_purpose }})"
   ansible.builtin.set_fact:
     mailcow_tf_destructive: >-
@@ -100,8 +86,6 @@
     argv: [terraform, apply, -input=false, -no-color, "{{ mailcow_tf_plan_file }}"]
     chdir: "{{ mailcow_terraform_dir }}"
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
@@ -115,13 +99,10 @@
   ansible.builtin.file:
     path: "{{ mailcow_terraform_dir }}/{{ mailcow_tf_plan_file }}"
     state: absent
-  # terraform writes the plan file on every run, including a no-op one, so
-  # removing it would otherwise report a change forever. It is scratch this
-  # same run created, not state, so cleaning it up is not a system change.
+  # Scratch this run created, not state — terraform writes it even for a
+  # no-op plan, so removing it would otherwise report a change forever.
   changed_when: false
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true

@@ -22,11 +22,9 @@
     group: root
     mode: "0644"
 
-# The apt source needs two things the host has to answer for itself: dpkg's
-# spelling of the architecture (amd64, where the kernel says x86_64) and the
-# distribution codename. Both are read directly instead of through gathered
-# facts, so the role behaves the same whatever the calling play does about
-# fact gathering.
+# dpkg's spelling of the architecture (amd64, where the kernel says x86_64)
+# and the codename. Read directly rather than from gathered facts, so the role
+# behaves the same whatever the calling play does about gathering.
 - name: Read the dpkg architecture
   ansible.builtin.command: dpkg --print-architecture
   register: docker_dpkg_arch
@@ -41,8 +39,8 @@
   changed_when: false
   check_mode: false
 
-# An empty codename would render `Suites:` blank, which apt accepts and then
-# silently resolves to nothing useful.
+# An empty codename renders `Suites:` blank, which apt accepts and resolves to
+# nothing.
 - name: Validate what the host reported
   ansible.builtin.assert:
     that:

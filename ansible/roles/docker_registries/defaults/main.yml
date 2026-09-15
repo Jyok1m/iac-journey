@@ -1,44 +1,36 @@
 ---
-# Each registry is opt-in. A disabled one is never validated and never logged
-# into, so leaving its credentials empty is fine.
-#
-# Credentials live in ansible/vaults/registries.yml. Use a token scoped to
-# pulling and pushing images, never an account password: this ends up in
-# /root/.docker/config.json on the host, base64-encoded and not encrypted.
+# Each registry is opt-in; a disabled one is never validated or logged into.
+# Credentials live in ansible/vaults/registries.yml — use a scoped token, never
+# an account password: this lands base64-encoded, unencrypted, in
+# /root/.docker/config.json.
 
-# ---------------------------- Docker Hub --------------------------- #
 docker_registries_dockerhub_enabled: true
 docker_registries_dockerhub_url: https://index.docker.io/v1/
 docker_registries_dockerhub_username: "{{ docker_registries_vault_dockerhub_username }}"
-# Docker Hub access token (Account Settings → Personal access tokens).
+# Account Settings → Personal access tokens.
 docker_registries_dockerhub_password: "{{ docker_registries_vault_dockerhub_token }}"
 
-# ---------------------------- GitLab.com --------------------------- #
 docker_registries_gitlab_enabled: true
 docker_registries_gitlab_url: registry.gitlab.com
 docker_registries_gitlab_username: "{{ docker_registries_vault_gitlab_username }}"
-# Personal or deploy token carrying read_registry, plus write_registry to push.
+# read_registry, plus write_registry to push.
 docker_registries_gitlab_password: "{{ docker_registries_vault_gitlab_token }}"
 
-# ------------------------ GitHub (ghcr.io) ------------------------- #
 docker_registries_github_enabled: true
 docker_registries_github_url: ghcr.io
 docker_registries_github_username: "{{ docker_registries_vault_github_username }}"
-# Classic PAT with read:packages, plus write:packages to push.
+# Classic PAT — ghcr.io rejects fine-grained ones. read:packages, plus
+# write:packages to push.
 docker_registries_github_password: "{{ docker_registries_vault_github_token }}"
 
-# community.docker.docker_login talks to the Docker API rather than shelling
-# out to the CLI, so the target host needs the Python HTTP stack.
+# docker_login talks to the Docker API rather than the CLI.
 docker_registries_packages:
   - python3-requests
 
-# Pinned rather than left to the module's ~/.docker/config.json default, which
-# expands from HOME — and sudo commonly keeps HOME pointing at the login user,
-# so the credentials land in /home/<user>/.docker and root never sees them.
-# root's copy is the one that matters: the Jenkins image push runs as root.
+# Pinned rather than the module's HOME-relative default: sudo commonly keeps
+# HOME on the login user, and root's copy is the one the Jenkins push reads.
 docker_registries_config_path: /root/.docker/config.json
 
-# The module skips a registry it already finds authenticated in the config
-# file. Set this to force it to re-authenticate and rewrite the entry:
-#   ansible-playbook ansible/site.yml --tags registries -e docker_registries_reauthorize=true
+# The module skips a registry already authenticated in the config file:
+#   ... --tags registries -e docker_registries_reauthorize=true
 docker_registries_reauthorize: false

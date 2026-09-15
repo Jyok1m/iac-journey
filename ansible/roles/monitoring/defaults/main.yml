@@ -1,44 +1,37 @@
 ---
-# Default Role
 monitoring_app_name: monitoring
 monitoring_app_dir: /opt/{{ monitoring_app_name }}
 
-# The source repo derived these from `infra`/`edge` inventory groups. There is
-# a single host here, so they are plain switches instead: this box is both the
-# Grafana hub and the edge that runs Traefik.
+# A single host here, so plain switches rather than inventory groups: this box
+# is both the Grafana hub and the edge running Traefik.
 monitoring_is_hub: true
 monitoring_is_edge: true
 
-# Prometheus instances federated into this hub. Shape: [{name, target}].
-# Empty while this is the only host; adding a leaf is a variable change.
+# Federated Prometheus instances, [{name, target}]. Empty while this is the
+# only host.
 monitoring_federation_targets: []
 monitoring_federation_port: 9090
 
-# Stamped on every series this Prometheus produces. The host was named
-# `main-host` in the previous repo and is `main` here, so series scraped before
-# and after the migration carry different values for this label.
+# Stamped on every series. The host was `main-host` in the previous repo, so
+# series from before the migration carry a different value.
 monitoring_external_host_label: "{{ inventory_hostname }}"
 
-# Service Prometheus
 monitoring_prometheus_image: prom/prometheus:v3.7.3@sha256:49214755b6153f90a597adcbff0252cc61069f8ab69ce8411285cd4a560e8038
 monitoring_prometheus_container_name: prometheus
 monitoring_prometheus_retention: 720h
 monitoring_prometheus_host: prometheus.{{ portfolio_domain_com }}
 monitoring_prometheus_redirect_host: prometheus.{{ portfolio_domain_fr }}
 
-# Service Grafana
 monitoring_grafana_image: grafana/grafana:12.4.0-19303720460@sha256:204c59cbbfabbbd9f6732305f02f7d5c8abaf164ad1ac448fa6a62c595c046e3
 monitoring_grafana_container_name: grafana
 monitoring_grafana_host: grafana.{{ portfolio_domain_com }}
 monitoring_grafana_redirect_host: grafana.{{ portfolio_domain_fr }}
 
-# Service Node Exporter
 monitoring_node_exporter_image: prom/node-exporter:v1.10.2@sha256:3ac34ce007accad95afed72149e0d2b927b7e42fd1c866149b945b84737c62c3
 monitoring_node_exporter_container_name: node-exporter
 
-# Service cAdvisor
 monitoring_cadvisor_image: ghcr.io/google/cadvisor:0.55.1@sha256:e02855207ec07bb45ee41f720645945251f093f24c28f8c29cf718490f784922
 monitoring_cadvisor_container_name: cadvisor
 
-# Traefik exposes its metrics on this port, reachable over traefik-public.
+# Reachable over traefik-public.
 monitoring_traefik_metrics_target: traefik:8082

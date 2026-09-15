@@ -1,6 +1,6 @@
 ---
-# Ordered after the deploy: the API is recreated by Compose with the new
-# REDIS_URL first, then the server it talks to picks up the matching password.
+# Runs after the deploy: the API gets the new REDIS_URL first, then the server
+# picks up the matching password.
 - name: Restart odyssai redis
   community.docker.docker_compose_v2:
     project_src: "{{ odyssai_app_dir }}"

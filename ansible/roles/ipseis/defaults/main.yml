@@ -1,61 +1,51 @@
 ---
-# Default Role
 ipseis_app_name: ipseis
 ipseis_app_dir: /opt/{{ ipseis_app_name }}
 
-# Host group allowed to read the stack directory. Jenkins deploys this app over
-# SSH and shells out to `docker compose` from that account, so it needs to
-# traverse the directory and read the compose and env files — group read is what
-# keeps the secrets off 0644 while still letting the pipeline run.
+# Jenkins deploys over SSH and shells out to `docker compose` from that
+# account, so it needs to read the compose and env files. Group read keeps the
+# secrets off 0644 while still letting the pipeline run.
 ipseis_deploy_group: jenkins
 
-# Second copy of the whole stack — database, API and front — on :dev images.
-# Set to false to stop rendering and deploying it.
+# Second copy of the whole stack on :dev images. False stops rendering it.
 ipseis_dev_enabled: true
 
-# Service Mongo
-# Kept on 8.2.5 deliberately: the running data directory was created by it, and
-# a version bump is a migration decision, not a deploy detail.
+# Pinned: the running data directory was created by 8.2.5, and a version bump
+# is a migration decision, not a deploy detail.
 ipseis_db_image: mongo:8.2.5@sha256:60aa240412f473f672ec8b282fd5651aa156dcc7a220f81f5381ce768ccc3167
 ipseis_db_container_name: ipseis-db
 ipseis_db_env_file: ipseis-db.env
-# Application database, shared by the prod and dev instances (each has its own
-# mongod, so the name does not need to differ).
+# Each copy has its own mongod, so the name does not need to differ.
 ipseis_db_name: ipseis
 ipseis_db_cache_gb: 1
 ipseis_db_dev_container_name: ipseis-db-dev
 ipseis_db_dev_env_file: ipseis-db-dev.env
 
-# Service API
 ipseis_api_image: jyok1m/ipseis-backend:latest
 ipseis_api_container_name: ipseis-api
 ipseis_api_env_file: ipseis-api.env
-# Heap capped below the cgroup limit so V8 fails with a JS stack trace instead
-# of being SIGKILLed by the kernel.
+# Heap under the cgroup limit so V8 fails with a JS stack trace instead of
+# being SIGKILLed.
 ipseis_api_heap_mb: 768
 ipseis_api_memory: 1G
 ipseis_api_dev_image: jyok1m/ipseis-backend:dev
 ipseis_api_dev_container_name: ipseis-api-dev
 ipseis_api_dev_env_file: ipseis-api-dev.env
 
-# Service Web (Next.js front, moved off Vercel onto this host)
 ipseis_web_image: jyok1m/ipseis-frontend:latest
 ipseis_web_container_name: ipseis-web
-# A standalone Next server idles around 100 MB; the ceiling is there for the
-# SSR bursts, and the heap stays under it so V8 aborts with a JS stack trace
-# instead of being SIGKILLed.
+# The ceiling is for the SSR bursts; a standalone Next server idles near 100 MB.
 ipseis_web_memory: 512M
 ipseis_web_heap_mb: 384
 ipseis_web_dev_image: jyok1m/ipseis-frontend:dev
 ipseis_web_dev_container_name: ipseis-web-dev
 # Rewrites every route to /maintenance with a 503 (src/proxy.ts). Read at
-# runtime, so flipping it and re-running the role is enough — no rebuild.
+# runtime: flipping it and re-running the role is enough.
 ipseis_web_maintenance: false
 ipseis_web_dev_maintenance: false
 
-# Application config
-# Canonical origin of the front. Also what the API puts in the links it mails
-# out (password reset, registration), so it has to be the name users can open.
+# Also what the API puts in the links it mails out, so it has to be the name
+# users can actually open.
 ipseis_frontend_url: https://{{ ipseis_web_host }}
 ipseis_dev_frontend_url: https://{{ ipseis_web_dev_host }}
 ipseis_nodemailer_email: ipseis.ne.pas.repondre@gmail.com
@@ -63,26 +53,22 @@ ipseis_nodemailer_email: ipseis.ne.pas.repondre@gmail.com
 ipseis_mail_to: hdemontabert@yahoo.fr
 ipseis_dev_mail_to: joachim.jasmin-dev@proton.me
 
-# Routing — the front is the only public face of the stack. The API used to
-# answer on ipseis-backend.<domain>; nothing calls it there any more, so the
-# router is gone and only the WebSocket below stays exposed.
+# The front is the only public face of the stack; the API's own router is gone
+# and only the WebSocket below stays exposed.
 #
-# Front — canonical on the .eu, the one zone terraform points at this host.
-# ipseis.fr is in the API's CORS list but is not a delegated domain at all (no
-# NS, no A), and Traefik answers the ACME challenge over HTTP-01: a router for
-# a name that does not resolve here would fail issuance in a loop. Add
-# Host(`ipseis.fr`) to the alias router the day the zone exists, not before.
+# Canonical on the .eu, the one zone terraform points at this host. ipseis.fr
+# is in the API's CORS list but is not delegated at all, and Traefik answers
+# ACME over HTTP-01 — a router for it would fail issuance in a loop.
 ipseis_web_host: ipseis.eu
 ipseis_web_router: Host(`{{ ipseis_web_host }}`)
 ipseis_web_alias_router: Host(`www.{{ ipseis_web_host }}`)
 ipseis_web_dev_host: dev.{{ ipseis_web_host }}
 ipseis_web_dev_router: Host(`{{ ipseis_web_dev_host }}`)
 
-# WebSocket — served under the front's own domain but routed to the API, see
-# the labels on ipseis-api for why it cannot live on the API's own host.
+# Served under the front's own domain but routed to the API — see the labels
+# on ipseis-api for why it cannot live elsewhere.
 ipseis_ws_router: Host(`{{ ipseis_web_host }}`) && PathPrefix(`/socket.io`)
 ipseis_ws_dev_router: Host(`{{ ipseis_web_dev_host }}`) && PathPrefix(`/socket.io`)
 
-# Backups — restic repository holding the Mongo dumps.
 ipseis_backup_restic_repo: s3:https://s3.gra.io.cloud.ovh.net/{{ ipseis_app_name }}
 ipseis_backup_on_calendar: "*-*-* 03:00:00"

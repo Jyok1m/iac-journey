@@ -15,9 +15,8 @@
     group: root
     mode: "0750"
 
-# Traefik refuses to start on a world-readable acme.json. state: touch with the
-# times preserved keeps the task idempotent instead of reporting a change on
-# every run.
+# Traefik refuses to start on a world-readable acme.json. Preserving the times
+# keeps this from reporting a change on every run.
 - name: Create the ACME store
   ansible.builtin.file:
     path: "{{ traefik_data_dir }}/acme.json"

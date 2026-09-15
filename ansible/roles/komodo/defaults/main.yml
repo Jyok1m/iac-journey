@@ -1,27 +1,22 @@
 ---
-# Default Role
 komodo_app_name: komodo
 komodo_app_dir: /opt/{{ komodo_app_name }}
 komodo_env_file: "{{ komodo_app_name }}.env"
 
-# Service Mongo
 komodo_mongo_image: mongo:8.3.7@sha256:a7f5aa200005611166adcec0192c2f11d0acc3bfd9d5eb68e1a998a990412e41
 komodo_mongo_container_name: "{{ komodo_app_name }}-db"
 
-# Service Core
 komodo_core_image: moghtech/komodo-core:2.3@sha256:768faad246f19f4c1ddfbb675346a7fe9a5010506d31ed4a21251199387004a2
 komodo_core_container_name: "{{ komodo_app_name }}-core"
 komodo_core_router: Host(`komodo.{{ portfolio_domain_com }}`)
-# Dated database backups stored on the host - https://komo.do/docs/setup/backup
+# https://komo.do/docs/setup/backup
 komodo_backups_path: /etc/komodo/backups
 
-# Service Periphery
 komodo_periphery_image: moghtech/komodo-periphery:2.3@sha256:637bf3c03a84f04821c902eba12f63e527ea1f781a350489aa34f17f48f36e57
 komodo_periphery_container_name: "{{ komodo_app_name }}-periphery"
-# Root directory used by the Periphery agent (stacks, repos, builds).
-# Also injected in the env file: the agent reads it at runtime.
+# Stacks, repos and builds. Also in the env file — the agent reads it at
+# runtime.
 komodo_periphery_root_dir: /etc/komodo
-# Where the other roles render their stacks. Mounted into Periphery so a
-# Resource Sync can declare them with files_on_host and point run_directory at
-# the very files Ansible writes, instead of Komodo keeping a second copy.
+# Mounted into Periphery so a Resource Sync can point run_directory at the very
+# files Ansible writes, instead of Komodo keeping a second copy.
 komodo_stacks_dir: /opt

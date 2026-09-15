@@ -1,10 +1,6 @@
-# The DS record each registrar needs, keyed by zone. Cloudflare signs a zone as
-# soon as its cloudflare_zone_dnssec is active, but the chain of trust only
-# closes once this value is published at the registrar, which no credential in
-# this repo can reach — the three mail zones are hosted at Cloudflare and
-# registered elsewhere. The role's verify step reads each DS out of live DNS
-# and, where it is missing, prints the value rather than letting the
-# DNSSEC-dependent checks quietly score zero.
+# The chain of trust only closes once this is published at the registrar, which
+# no credential in this repo can reach. The role's verify step reads each DS
+# out of live DNS and prints the value where it is missing.
 output "mail_dnssec_ds" {
   description = "DS record to publish at the registrar, per signed mail zone."
   value       = { for d, z in cloudflare_zone_dnssec.mail : d => z.ds }
@@ -29,8 +25,7 @@ output "mail_dnssec_digest" {
   } }
 }
 
-# Everything the mail setup published, so a run can diff what it believes it
-# created against what dig actually returns.
+# So a run can diff what it believes it created against what dig returns.
 output "mail_records" {
   description = "Name and type of every mail DNS record under management."
   value       = { for k, r in cloudflare_dns_record.mail : k => "${r.type} ${r.name}" }

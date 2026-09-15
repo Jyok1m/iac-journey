@@ -1,14 +1,10 @@
 ---
-# generate_config.sh is never run. It is interactive, it overwrites
-# mailcow.conf rather than merging into it, and — the reason that settles it —
-# its IPv6 step offers to rewrite /etc/docker/daemon.json and restart the
-# Docker daemon, which on this host would bounce all nine unrelated stacks.
-# The tree is checked out at a pinned tag and this role owns the config.
-# Recorded as deviation CONF-1 in the decision log.
+# generate_config.sh is never run: interactive, overwrites mailcow.conf rather
+# than merging, and its IPv6 step offers to restart the Docker daemon. Pinned
+# checkout, config owned by this role. Deviation CONF-1.
 
-# jq is not a build dependency, it is a runtime one: certs.yml reads Traefik's
-# ACME store with it, and the certificate sync script does too — so a host
-# without it loses certificate renewal silently, months later.
+# A runtime dependency, not a build one: certs.yml and the sync script read
+# Traefik's ACME store with it, so a host without jq loses renewal silently.
 - name: Install the packages the role shells out to
   ansible.builtin.apt:
     name:
@@ -26,15 +22,9 @@
     group: root
     mode: "0750"
 
-# The working tree is never clean once the stack has run: postfix.sh truncates
-# data/conf/postfix/main.cf at its "# Overrides #" marker and appends extra.cf
-# on every container start. That is upstream's design, not drift, so a plain
-# checkout with force:false fails on the second run and one with force:true
-# would report a change forever. Gating on the tag means the checkout simply
-# does not run in steady state, which is what idempotence requires.
-# ansible.builtin.git has no read-only mode: asking it for the current version
-# means performing a checkout, which is the very thing this task exists to
-# decide whether to do. Hence the raw command.
+# The tree is never clean once the stack has run — postfix.sh rewrites main.cf
+# on every container start. Gating on the tag keeps the checkout out of steady
+# state. Raw command because ansible.builtin.git has no read-only mode.
 - name: Read the checked-out mailcow version # noqa: command-instead-of-module
   ansible.builtin.command:
     cmd: git -C {{ mailcow_app_dir }} describe --tags --exact-match
@@ -48,16 +38,14 @@
     dest: "{{ mailcow_app_dir }}"
     version: "{{ mailcow_version }}"
     depth: 1
-    # Only reachable on a genuine version change, where discarding mailcow's
-    # runtime rewrite of main.cf is the intended outcome — the new tag ships
-    # its own, and postfix.sh re-appends extra.cf on the next start.
+    # Only on a real version change, where discarding the runtime rewrite of
+    # main.cf is the point: the new tag ships its own.
     force: true
   register: mailcow_checkout
   when: mailcow_current_version.stdout | trim != mailcow_version
 
-# generate_config.sh insists on it, and although this role never calls that
-# script, docker compose reads .env for variable interpolation and would
-# otherwise substitute empty strings into every port and password.
+# docker compose reads .env for interpolation and would otherwise substitute
+# empty strings into every port and password.
 - name: Link .env to mailcow.conf
   ansible.builtin.file:
     src: mailcow.conf

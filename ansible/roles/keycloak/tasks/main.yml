@@ -19,10 +19,8 @@
     - keycloak-db.env
   no_log: true
 
-# Bind-mounted into the container, so the files only have to be readable: the
-# server never writes here. Note that copy adds and updates but does not prune,
-# so a file removed from the theme upstream has to be cleaned by hand on the
-# host — worth knowing the day a .ftl is renamed.
+# copy adds and updates but does not prune: a renamed .ftl leaves its old
+# version behind on the host.
 - name: Deploy login themes
   ansible.builtin.copy:
     src: themes/
@@ -50,21 +48,10 @@
     wait: true
     wait_timeout: 300
 
-# Resolution locale du nom public du SSO.
-#
-# Le nom est proxifie par Cloudflare, dont la protection anti-robot juge la
-# signature TLS du client et pas seulement son User-Agent. curl et la pile de
-# Node passent ; celle d'Ansible, qui construit son propre contexte TLS, se
-# fait rendre un 403 code 1010. Toute tache d'administration du realm echouait
-# donc depuis la machine elle-meme.
-#
-# Pointer le nom sur la boucle locale met Traefik en face au lieu de
-# Cloudflare : le SNI et l'en-tete Host restent le nom public, le certificat
-# est celui que Traefik detient deja, et rien n'est affaibli cote edge. C'est
-# aussi un aller-retour public en moins pour une operation interne.
-#
-# Sans effet sur les conteneurs : ils ont leur propre resolution et ne lisent
-# pas ce fichier.
+# Cloudflare juge la signature TLS du client : la pile d'Ansible se fait rendre
+# un 403 code 1010 la ou curl passe. Pointer le nom sur la boucle locale met
+# Traefik en face, SNI et Host inchanges. Sans effet sur les conteneurs, qui
+# ont leur propre resolution.
 - name: Resolve the SSO hostname locally
   ansible.builtin.lineinfile:
     path: /etc/hosts
@@ -74,16 +61,9 @@
     group: root
     mode: "0644"
 
-# ------------------------------------------------------------------ realms
-
-# Delegue au controleur et non a la machine. Le realm se configure par l'API
-# d'administration, qui est une API HTTP comme une autre : rien n'exige de
-# partir du serveur, et le script n'a besoin que de curl et jq, presents sur le
-# poste. Cela evite aussi d'installer jq sur l'hote pour une operation qui n'y
-# touche a rien.
-#
-# run_once parce que l'inventaire peut compter plusieurs hotes : les realms,
-# eux, n'existent qu'une fois.
+# Delegue au controleur : l'API d'administration est une API HTTP comme une
+# autre, et le script n'a besoin que de curl et jq. run_once parce que les
+# realms n'existent qu'une fois, quel que soit le nombre d'hotes.
 - name: Configure the OdyssAI realms
   ansible.builtin.script:
     cmd: setup-realm.sh {{ item.0.name }}
@@ -102,22 +82,17 @@
     SMTP_FROM: "{{ item.0.mailbox }}"
     SMTP_FROM_NAME: "{{ item.0.display_name }}"
     SMTP_PASSWORD: "{{ mailcow_vault_mailboxes[item.0.mailbox] }}"
-  # Un passage par client. Les reglages de realm sont reecrits a l'identique a
-  # chaque fois, le script etant idempotent.
   loop: "{{ keycloak_odyssai_realms | subelements('clients') }}"
   loop_control:
     label: "{{ item.0.name }} / {{ item.1.id }}"
   delegate_to: localhost
   run_once: true
   vars:
-    # ansible_become vaut true pour tout l'inventaire, et une variable de
-    # connexion l'emporte sur le mot-cle `become` de la tache : le poser a faux
-    # ici est la seule facon de ne pas demander sudo sur le poste, qui n'en a
-    # aucun besoin pour appeler une API.
+    # Une variable de connexion l'emporte sur le mot-cle `become` : c'est la
+    # seule facon de ne pas demander sudo sur le poste.
     ansible_become: false
     ansible_connection: local
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
   no_log: true
-  # Le script est idempotent : il met a jour un realm existant et n'en recree
-  # aucun. Rien a signaler tant qu'il sort en 0.
+  # Le script est idempotent : rien a signaler tant qu'il sort en 0.
   changed_when: false

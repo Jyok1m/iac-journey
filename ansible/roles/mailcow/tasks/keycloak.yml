@@ -1,21 +1,12 @@
 ---
-# Provider mode "keycloak", not "generic-oidc".
+# "keycloak" and not "generic-oidc": user_login() switches on authsource with
+# cases for keycloak, ldap and mailcow only, so a generic-oidc mailbox falls
+# through to `return false` and can authenticate nowhere.
 #
-# The choice is forced by mailcow's own code rather than by preference:
-# user_login() switches on authsource with cases for keycloak, ldap and
-# mailcow only. A mailbox marked generic-oidc matches nothing and falls
-# through to `return false`, so those users can authenticate nowhere outside a
-# live browser session — not even the UI login form. The keycloak mode also
-# brings periodic sync and user import, which generic-oidc has no fields for.
-#
-# What this does NOT achieve is bar item 7 in full. Dovecot in mailcow
-# advertises `auth_mechanisms = plain login` and nothing else, so IMAP and
-# SMTP cannot speak OIDC at all; Postfix delegates SASL to that same passdb
-# and inherits the limit. Even mailcow's "mailpassword flow" does not fix it —
-# it compares the offered password against a bcrypt hash held in a Keycloak
-# *attribute* via the Admin REST API, so the credential Keycloak itself holds
-# is never consulted. Mail clients therefore use app passwords. Recorded as
-# deviation SSO-1 in the decision log, and stated rather than worked around.
+# This does not cover IMAP or SMTP: Dovecot advertises `plain login` and
+# nothing else, and Postfix inherits the limit through the same passdb. Even
+# the "mailpassword flow" only checks a bcrypt hash stored as a Keycloak
+# attribute. Mail clients use app passwords. Deviation SSO-1.
 
 - name: Assert the Keycloak admin credentials are in the vault
   ansible.builtin.assert:
@@ -44,9 +35,7 @@
     # Confidential: mailcow holds a client secret and uses the service account.
     public_client: false
     standard_flow_enabled: true
-    # mailcow never issues a password grant — the only grant types in its
-    # codebase are authorization_code and client_credentials — so leaving this
-    # on would widen the attack surface for nothing.
+    # mailcow only ever issues authorization_code and client_credentials.
     direct_access_grants_enabled: false
     # Required for the Admin REST calls mailcow makes to read users.
     service_accounts_enabled: true
@@ -56,8 +45,7 @@
       - "{{ mailcow_keycloak_redirect_url }}"
     state: present
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
+  # A task-level `become: false` loses to ansible_become when delegated.
   vars:
     ansible_become: false
   run_once: true
@@ -78,8 +66,6 @@
       - name: view-users
     state: present
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
@@ -95,8 +81,6 @@
     realm: "{{ mailcow_keycloak_realm }}"
     client_id: "{{ mailcow_keycloak_client_id }}"
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
@@ -132,13 +116,11 @@
       client_id: "{{ mailcow_keycloak_client_id }}"
       client_secret: "{{ mailcow_kc_secret.clientsecret_info.value }}"
       redirect_url: "{{ mailcow_keycloak_redirect_url }}"
-      # mailcow's bundled provider only adds the openid scope when this
-      # parses as >= 20.0.0. Blank means no id_token and a login that fails
-      # with nothing useful in the logs.
+      # Below 20.0.0 the bundled provider skips the openid scope: no
+      # id_token, and a login that fails with nothing useful in the logs.
       version: "{{ mailcow_keycloak_version }}"
-      # Off: it would store a second, separate bcrypt hash as a Keycloak user
-      # attribute and present it as though Keycloak were authenticating IMAP.
-      # It is not, and the two passwords would drift apart silently.
+      # Off: it stores a second bcrypt hash as a Keycloak attribute and
+      # presents it as though Keycloak were authenticating IMAP. It is not.
       mailpassword_flow: 0
       periodic_sync: 0
       import_users: 0

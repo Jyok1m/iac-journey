@@ -15,8 +15,8 @@ AUTHDB="{{ backup_mongo_authdb }}"
 DB="{{ backup_mongo_db }}"
 KEEP_LOCAL="{{ backup_mongo_local_keep }}"
 
-# systemd already injects these through EnvironmentFile. Sourcing them here as
-# well is what makes a manual run behave exactly like a scheduled one.
+# systemd injects these through EnvironmentFile; sourcing them makes a manual
+# run behave like a scheduled one.
 ENV_FILE="/etc/backup-mongo-${NAME}.env"
 if [[ ! -r "${ENV_FILE}" ]]; then
   echo "[${NAME}] env file ${ENV_FILE} is not readable" >&2
@@ -33,8 +33,8 @@ chmod 0700 "${LOCAL_DIR}"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 ARCHIVE="${LOCAL_DIR}/${NAME}-${TS}.archive.gz"
 
-# A dump that dies halfway still leaves the redirection target behind. Dropping
-# it keeps a truncated archive from being mistaken for a usable one later.
+# A dump that dies halfway leaves its redirection target behind, and a
+# truncated archive must not be mistaken for a usable one.
 trap 'rm -f "${ARCHIVE}"' ERR
 
 DUMP_ARGS=(

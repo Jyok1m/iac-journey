@@ -16,8 +16,8 @@ services:
     volumes:
       - ipseis-db:/data/db
       - ipseis-db-configdb:/data/configdb
-    # Credentials are read from the container's own environment: keeping them
-    # out of the compose file keeps them out of `docker inspect` output.
+    # From the container's own environment, so they stay out of
+    # `docker inspect`.
     healthcheck:
       test:
         - CMD-SHELL
@@ -36,9 +36,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # ipseis-internal is internal, so a published port would never be reachable
-    # through it. ipseis-db-host is the plain bridge that makes the loopback
-    # binding above work — it is also the database's only route out.
+    # ipseis-internal is internal, so the published port needs the plain
+    # bridge to be reachable at all.
     networks:
       - ipseis-internal
       - ipseis-db-host
@@ -74,16 +73,12 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      # The API has no public host of its own. Its only route in is the
-      # WebSocket below: the REST surface is reached by the front over
-      # ipseis-internal, and express.static would otherwise serve
-      # /uploads/*.pdf — contracts included — with no authentication at all.
+      # No public host: the front reaches REST over ipseis-internal, and
+      # express.static would otherwise serve /uploads/*.pdf unauthenticated.
       - traefik.http.services.{{ ipseis_api_container_name }}.loadbalancer.server.port=3000
-      # Socket.io served under the front's own domain. The handshake
-      # authenticates on the `token` cookie, which the front sets host-only on
-      # its domain, and a Next route handler cannot relay a WebSocket — so this
-      # router is the one thing that has to stay public. Priority beats the
-      # front's router so the path prefix wins on the same host.
+      # Socket.io under the front's own domain: the handshake reads the
+      # host-only `token` cookie, and a Next route handler cannot relay a
+      # WebSocket. Priority beats the front's router on the same host.
       - traefik.http.routers.{{ ipseis_api_container_name }}-ws.rule={{ ipseis_ws_router }}
       - traefik.http.routers.{{ ipseis_api_container_name }}-ws.priority=100
       - traefik.http.routers.{{ ipseis_api_container_name }}-ws.entrypoints=websecure
@@ -94,18 +89,14 @@ services:
     image: {{ ipseis_web_image }}
     container_name: {{ ipseis_web_container_name }}
     restart: unless-stopped
-    # NODE_ENV is pinned to production in the image and stays there on both
-    # copies: the container runs a compiled standalone build either way, and
-    # the front only marks its session cookie `secure` when it sees production.
+    # production on both copies: the front only marks its session cookie
+    # `secure` when it sees it.
     environment:
       NODE_OPTIONS: --max-old-space-size={{ ipseis_web_heap_mb }}
-      # Server-side calls stay on the internal network: no round trip through
-      # the public proxy, no TLS to negotiate, nothing that a DNS outage or an
-      # expired certificate can break. Read at runtime, so the same image is
-      # promoted from dev to prod without a rebuild.
+      # Internal network: no round trip through the public proxy. Read at
+      # runtime, so the same image is promoted from dev to prod as is.
       BACKEND_URL: http://{{ ipseis_api_container_name }}:3000
-      # Browser-side WebSocket origin. Empty means same origin as the page,
-      # which is exactly what the -ws router above serves.
+      # Empty means same origin as the page, which the -ws router serves.
       SOCKET_PUBLIC_URL: ""
       MAINTENANCE_MODE: "{{ ipseis_web_maintenance | ternary('true', 'false') }}"
     deploy:
@@ -122,23 +113,20 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # ipseis-internal reaches the API; traefik-public carries both the inbound
-    # traffic and the container's only route out, which next/image needs to
-    # fetch the remote sources allowed in next.config.mjs.
+    # traefik-public carries the inbound traffic and is also the only route
+    # out, which next/image needs for the remote sources.
     networks:
       - ipseis-internal
       - traefik-public
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      # Canonical host
       - traefik.http.routers.{{ ipseis_web_container_name }}.rule={{ ipseis_web_router }}
       - traefik.http.routers.{{ ipseis_web_container_name }}.entrypoints=websecure
       - traefik.http.routers.{{ ipseis_web_container_name }}.tls.certresolver=letsencrypt
       - traefik.http.services.{{ ipseis_web_container_name }}.loadbalancer.server.port=3000
-      # Permanent redirect from the aliases to the canonical host. One name has
-      # to be the only one crawlers see, and NEXT_PUBLIC_SITE_URL — baked at
-      # build time — already declares that name in the canonical tags.
+      # The aliases redirect to the canonical host, the one
+      # NEXT_PUBLIC_SITE_URL already declares in the canonical tags.
       - traefik.http.routers.{{ ipseis_web_container_name }}-alias.rule={{ ipseis_web_alias_router }}
       - traefik.http.routers.{{ ipseis_web_container_name }}-alias.entrypoints=websecure
       - traefik.http.routers.{{ ipseis_web_container_name }}-alias.tls.certresolver=letsencrypt
@@ -255,19 +243,15 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      # No alias router here: the dev front answers on a single name, and
-      # nothing should be indexing it anyway.
       - traefik.http.routers.{{ ipseis_web_dev_container_name }}.rule={{ ipseis_web_dev_router }}
       - traefik.http.routers.{{ ipseis_web_dev_container_name }}.entrypoints=websecure
       - traefik.http.routers.{{ ipseis_web_dev_container_name }}.tls.certresolver=letsencrypt
       - traefik.http.services.{{ ipseis_web_dev_container_name }}.loadbalancer.server.port=3000
 {% endif %}
 
-# Compose stamps every network and volume it creates with the key used to
-# declare it, then refuses to touch one whose stamp no longer matches. These
-# keys are therefore frozen on the names the running stack was built with —
-# shortening them to `private` or `db_data` would strand the live networks and
-# start the databases from empty volumes.
+# Compose stamps each network and volume with the key used to declare it and
+# refuses to touch one whose stamp moved. These keys are frozen on what the
+# running stack was built with — renaming one strands it.
 networks:
   ipseis-internal:
     name: {{ ipseis_app_name }}-internal

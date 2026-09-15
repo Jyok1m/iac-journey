@@ -7,11 +7,8 @@
     group: "{{ odyssai_deploy_group }}"
     mode: "0750"
 
-# 0600 and root-owned: these carry the Keycloak client secret and the Redis
-# password. The deploy group can read the compose file, not these.
-# No handler needed: Compose resolves env_file into the service's config hash,
-# so a changed value here is already enough for `recreate: auto` to bounce the
-# container below.
+# No handler: env_file is part of the service config hash, so `recreate: auto`
+# already bounces the container when a value here moves.
 - name: Deploy env files
   ansible.builtin.template:
     src: odyssai-api.env.j2
@@ -31,10 +28,6 @@
     pg_password: "{{ item.pg_password }}"
   no_log: true
 
-# Same treatment for the two database servers: POSTGRES_PASSWORD is a secret,
-# and it is read from the container's environment rather than written into the
-# compose file, where `docker inspect` would hand it to anyone in the deploy
-# group. No handler either — env_file is part of the service config hash.
 - name: Deploy database env files
   ansible.builtin.template:
     src: odyssai-db.env.j2
@@ -47,12 +40,8 @@
     pg_password: "{{ item.pg_password }}"
   no_log: true
 
-# Redis reads its password from this file rather than from an argument, so it
-# is a secret too and gets the same treatment. Mounted read-only by the
-# container, which runs as the redis user and only needs to read it.
-# This one does need a handler: a bind mount is opaque to Compose, so editing
-# the file changes nothing it can notice and the server would keep serving the
-# old password until something restarts it.
+# This one does need a handler: a bind mount is opaque to Compose, so the
+# server would keep serving the old password until something restarts it.
 - name: Deploy redis config
   ansible.builtin.template:
     src: redis.conf.j2
@@ -78,9 +67,8 @@
   community.docker.docker_compose_v2_pull:
     project_src: "{{ odyssai_app_dir }}"
 
-# recreate stays on auto: Compose recreates a container whose image ID moved,
-# which is exactly what a fresh push on the same branch tag produces — so a
-# rebuild of :dev bounces the dev copy and leaves production alone.
+# auto recreates a container whose image ID moved — a fresh push on :dev
+# bounces the dev copy and leaves production alone.
 - name: Deploy services
   community.docker.docker_compose_v2:
     project_src: "{{ odyssai_app_dir }}"

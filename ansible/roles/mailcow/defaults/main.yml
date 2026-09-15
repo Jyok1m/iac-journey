@@ -1,60 +1,36 @@
 ---
-# Default Role
 mailcow_app_name: mailcow
 mailcow_app_dir: /opt/{{ mailcow_app_name }}
 
-# Upstream checkout. Pinned to a release tag rather than tracking master:
-# update.sh rewrites mailcow.conf in place, and this role owns that file.
-# Bumping this variable is the supported way to upgrade.
+# Pinned to a release tag: update.sh rewrites mailcow.conf in place, and this
+# role owns that file. Bumping this variable is the supported upgrade path.
 mailcow_repo: https://github.com/mailcow/mailcow-dockerized.git
 mailcow_version: 2026-07a
 
-# ------------------------------ Identity ------------------------------ #
-# MAILCOW_HOSTNAME. This one name is simultaneously the SMTP HELO name
-# (postfix myhostname), the PTR target, the CN of the certificate served on
-# 25/465/587, and the web UI host. mailcow's docs require it to be a FQDN
-# that is not the mail domain itself, hence the subdomain.
-#
-# It is NOT per-domain. One host serves every domain below, so adding a domain
-# adds no hostname, no address, no certificate and no reverse record — only
-# the records a receiver checks against the envelope sender.
+# One name for the whole host: SMTP HELO, PTR target, certificate CN on
+# 25/465/587, and web UI host. Must be a FQDN that is not a mail domain itself.
 mailcow_hostname: mail.{{ portfolio_domain_com }}
-# The zone mailcow_hostname itself lives in, and the one the report mailboxes
-# live in. Must appear in mailcow_domains.
 mailcow_domain: "{{ portfolio_domain_com }}"
 mailcow_timezone: Europe/Paris
 
-# Every domain mailcow sends and receives for. Mirrors mail_domains in
-# terraform/mail.auto.tfvars, and preflight refuses to run if the two disagree:
-# a domain here but not there gets mailboxes nobody can deliver to, and a
-# domain there but not here publishes an MX for a domain mailcow rejects at
-# RCPT TO — which is a backscatter source, not just a dead end.
-#
-# client_autoconfig publishes autodiscover/autoconfig and makes Traefik hold a
-# certificate for both names. Worth it for a domain whose mailboxes are opened
-# in a mail client; pure cost for one that only ever sends from no-reply.
-# mta_sts is independent of it: that one is about how other MTAs deliver to
-# us, not about how our own clients connect.
+# Mirrors mail_domains in terraform/mail.auto.tfvars — preflight refuses to run
+# if the two disagree. A domain there but not here publishes an MX for a domain
+# mailcow rejects at RCPT TO, which is a backscatter source.
+# client_autoconfig costs a certificate for two extra names, so it stays off for
+# domains that only ever send from no-reply.
 mailcow_domains:
   - name: "{{ portfolio_domain_com }}"
     client_autoconfig: true
     mta_sts: true
-  # helenedm@ is a human mailbox, read in a real client.
   - name: ipseis.eu
     client_autoconfig: true
     mta_sts: true
-  # no-reply@ only, sent by the app. Nothing here is ever opened in a mail
-  # client, so autodiscover/autoconfig would be dead names on a certificate.
   - name: odyssai.app
     client_autoconfig: false
     mta_sts: true
 
-# ------------------------------ Networking ---------------------------- #
-# Traefik owns host ports 80 and 443, so mailcow's nginx binds high ports on
-# the loopback and is reached over the shared docker network instead.
-# Host port and container port are the same value by mailcow's design — the
-# compose file publishes ${HTTP_PORT}:${HTTP_PORT} and templates the same
-# number into nginx's listen directive.
+# Traefik owns 80/443, so mailcow's nginx binds high ports on the loopback.
+# Host and container port are the same value by mailcow's design.
 mailcow_http_bind: 127.0.0.1
 mailcow_http_port: 8080
 mailcow_https_bind: 127.0.0.1
@@ -63,43 +39,20 @@ mailcow_https_port: 8443
 mailcow_traefik_network: "{{ traefik_public_network | default('traefik-public') }}"
 mailcow_compose_project: mailcowdockerized
 
-# Traefik's Host() matcher takes exactly one name — a multi-argument form is
-# rejected with "unexpected number of parameters; got 4, expected one of [1]"
-# and the whole router silently fails to build, leaving Traefik to answer its
-# own 404. Several names means several Host() matchers joined by ||.
-# The backticks are rule syntax, not quoting, so they reach the label verbatim.
+# Host() takes exactly one name — several names means several matchers joined
+# by ||, or the router silently fails to build.
 mailcow_router_rule: >-
   {{ ([mailcow_hostname] + mailcow_additional_server_names)
      | map('regex_replace', '^(.*)$', 'Host(`\1`)') | join(' || ') }}
 
-# mailcow's own bridge. Upstream writes this as a three-octet prefix, not a
-# CIDR, and appends the host part itself — the compose file builds
-# ${IPV4_NETWORK}.0/24 out of it.
-#
-# 172.16.0, deliberately, and NOT anything in 172.17–172.31: Docker's built-in
-# default address pool is exactly that range, one /16 per network, and this
-# host has used all fifteen. Every stack here takes a whole /16 for a handful
-# of containers, so there is no gap left to move into — the earlier value of
-# 172.21.0 was free when it was chosen and was taken by odyssai-internal
-# afterwards, which is how the deploy failed with "pool overlaps with other one
-# on this address space".
-#
-# 172.16.0.0/16 sits one /16 BELOW the default pool. The daemon will never
-# auto-assign out of it, so no future stack can take it the way odyssai took
-# 172.21 — and only the /24 below is actually claimed. Verified free on this
-# host: no route, no bridge, and the vRack is on 10.42.0.0/24.
-#
-# The durable fix is a `default-address-pools` of /24s in
-# /etc/docker/daemon.json, but that needs a daemon restart, which would bounce
-# all nine other stacks. Same reason ENABLE_IPV6 stays off.
-#
-# Changing this moves the gateway address, which mailcow_api_allow_from derives
-# rather than repeats — so the two cannot drift.
+# Three-octet prefix, not a CIDR: upstream appends the host part itself.
+# 172.16.0 sits one /16 below Docker's default pool (172.17–172.31), all
+# fifteen of which are taken on this host — so no future stack can claim it.
+# The durable fix is default-address-pools in daemon.json, which needs a daemon
+# restart and would bounce nine other stacks. Same reason ENABLE_IPV6 stays off.
 mailcow_ipv4_network: 172.16.0
 mailcow_ipv6_network: "fd4d:6169:6c63:6f77::/64"
 
-# 125 GiB on this host, so nothing is trimmed for memory. ClamAV and the
-# full-text index are the two that upstream disables on small machines.
 mailcow_skip_clamd: false
 mailcow_skip_fts: false
 mailcow_fts_heap: 128
@@ -107,14 +60,10 @@ mailcow_fts_procs: 1
 
 mailcow_acme_email: "{{ traefik_acme_email | default('joachim.jasmin-dev@proton.me') }}"
 
-# IPv6 inside mailcow's bridge stays off. Turning it on requires
-# /etc/docker/daemon.json and a Docker daemon restart, which would bounce all
-# nine unrelated stacks on this host. Inbound IPv6 on the published ports
-# works regardless — docker-proxy already listens on [::] — which is what
-# internet.nl's reachability check measures. Revisit once the IPv6 PTR is set.
+# Inbound IPv6 on the published ports works regardless — docker-proxy listens
+# on [::]. Revisit once the IPv6 PTR is set.
 mailcow_enable_ipv6: false
 
-# ------------------------------ Ports --------------------------------- #
 mailcow_ports:
   smtp: 25
   smtps: 465
@@ -125,50 +74,30 @@ mailcow_ports:
   pops: 995
   sieve: 4190
 
-# ------------------------------ TLS ----------------------------------- #
-# acme-mailcow is disabled and Traefik is the single ACME client on this
-# host. mailcow documents this path: "You can also use any external ACME
-# client to obtain certificates, but you will need to make sure that they are
-# copied to the correct location and a post-hook reloads affected containers."
-# The post-hook here is a systemd path unit watching Traefik's store, so a
-# renewal between Ansible runs still reaches Postfix and Dovecot.
+# Traefik is the single ACME client on this host; a systemd path unit watching
+# its store copies the certificates over, so a renewal between Ansible runs
+# still reaches Postfix and Dovecot.
 mailcow_skip_lets_encrypt: true
 mailcow_traefik_acme_store: /var/lib/traefik/acme.json
 mailcow_traefik_acme_resolver: letsencrypt
 mailcow_cert_sync_unit: mailcow-certsync
 
-# ------------------------------ Mailboxes ------------------------------ #
-# Passwords come from mailcow_vault_mailboxes, keyed by the FULL address.
-# Not by the local part: no-reply exists on two different domains here, and a
-# map keyed on the local part would have silently given them one shared
-# password — or, worse, whichever of the two the vault happened to define last.
-# preflight refuses to run unless every address below has an entry.
-#
-# These are ordinary mailboxes with their own credentials, one per address, so
-# each app authenticates on submission as itself. An app whose password leaks
-# can send as one address, not as the domain.
+# Passwords come from mailcow_vault_mailboxes, keyed by the FULL address:
+# no-reply exists on two domains here. preflight refuses to run unless every
+# address below has an entry.
 mailcow_mailboxes:
-  # joachimjasmin.com
   - {address: "info@{{ portfolio_domain_com }}", name: Info, quota: 3072}
   - {address: "invoice@{{ portfolio_domain_com }}", name: Invoice, quota: 3072}
   - {address: "dmarc@{{ portfolio_domain_com }}", name: DMARC reports, quota: 1024}
   - {address: "newsletter@{{ portfolio_domain_com }}", name: Newsletter, quota: 2048}
   - {address: "no-reply@{{ portfolio_domain_com }}", name: No reply, quota: 1024}
   - {address: "alert@{{ portfolio_domain_com }}", name: Alerts, quota: 1024}
-  # ipseis.eu
   - {address: helenedm@ipseis.eu, name: Hélène DM, quota: 5120}
-  # odyssai.app
   - {address: no-reply-dev@odyssai.app, name: No reply dev, quota: 1024}
   - {address: no-reply@odyssai.app, name: No reply, quota: 1024}
 
-# postmaster and abuse are the two addresses RFC 2142 makes mandatory, and a
-# receiver that cannot reach either treats the domain as unattended. They are
-# aliases rather than mailboxes so there is no extra password to manage, and
-# they point at an address that is actually read — which for odyssai.app means
-# crossing domains, since its only mailbox is a no-reply.
-#
-# tls-reports is the destination named in every TLS-RPT record; DMARC reports
-# for all three domains land in dmarc@ the same way.
+# postmaster and abuse are mandatory (RFC 2142) and must reach something that
+# is actually read — which for odyssai.app means crossing domains.
 mailcow_aliases:
   - {address: "postmaster@{{ portfolio_domain_com }}", goto: "info@{{ portfolio_domain_com }}"}
   - {address: "abuse@{{ portfolio_domain_com }}", goto: "info@{{ portfolio_domain_com }}"}
@@ -178,70 +107,52 @@ mailcow_aliases:
   - {address: postmaster@odyssai.app, goto: "info@{{ portfolio_domain_com }}"}
   - {address: abuse@odyssai.app, goto: "info@{{ portfolio_domain_com }}"}
 
-# ------------------------------ API ------------------------------------ #
-# API_KEY is only honoured when API_ALLOW_FROM validates to a non-empty list;
-# the phpfpm entrypoint nests the key insert inside that check. The gateway of
-# mailcow's own bridge is the address the container sees for a call made from
-# the host over the published loopback port, which is why it is derived from
-# mailcow_ipv4_network rather than written out.
+# API_KEY is only honoured when API_ALLOW_FROM is non-empty. The gateway is the
+# address the container sees for a call made over the published loopback port.
 mailcow_api_allow_from:
   - 127.0.0.1
   - "{{ mailcow_ipv4_network }}.1"
 mailcow_api_url: "http://{{ mailcow_http_bind }}:{{ mailcow_http_port }}"
 
-# ------------------------------ Keycloak ------------------------------- #
-# Provider mode "keycloak" rather than "generic-oidc": generic-oidc has no
-# case in mailcow's user_login() switch, so those users can authenticate
-# nowhere outside a browser session. Neither mode covers IMAP or SMTP —
-# Dovecot advertises only PLAIN and LOGIN — so mail clients use app
-# passwords. Recorded as deviation SSO-1 in the decision log.
+# "keycloak" and not "generic-oidc": the latter has no case in mailcow's
+# user_login() switch. Neither mode covers IMAP or SMTP — mail clients use app
+# passwords. Deviation SSO-1 in the decision log.
 mailcow_keycloak_enabled: true
 mailcow_keycloak_url: https://sso.{{ portfolio_domain_com }}
 mailcow_keycloak_realm: homelab
 mailcow_keycloak_client_id: mailcow
-# mailcow's bundled provider only requests the openid scope when this parses
-# as >= 20.0.0. Left blank there is no id_token and the flow fails silently.
+# Below 20.0.0 the bundled provider skips the openid scope: no id_token, and
+# the flow fails silently.
 mailcow_keycloak_version: 26.7.0
 mailcow_keycloak_redirect_url: https://{{ mailcow_hostname }}
 
-# ------------------------------ Terraform ------------------------------ #
-# Runs on the control node, not the managed host: the state backend
-# credentials and the Cloudflare token live there and are never copied.
+# Terraform runs on the control node: the backend credentials and the
+# Cloudflare token live there and are never copied.
 mailcow_terraform_dir: "{{ playbook_dir }}/../terraform"
 mailcow_terraform_backend_config: backend.hcl
-# Written inside the terraform directory, which .gitignore already covers
-# with the *.tfplan pattern, and removed again at the end of every pass.
 mailcow_tf_plan_file: mailcow.tfplan
 mailcow_dkim_selector: dkim
 mailcow_dkim_key_size: 2048
 
-# How long to wait for a freshly applied record to be visible from a public
-# resolver before giving up. ACME fails outright if it runs first.
+# ACME fails outright if it runs before the records are visible publicly.
 mailcow_dns_propagation_retries: 30
 mailcow_dns_propagation_delay: 10
 mailcow_dns_resolvers:
   - 1.1.1.1
   - 8.8.8.8
 
-# The per-domain expansion of these three lists lives in vars/main.yml — it is
-# derived from mailcow_domains, not a knob.
-
-# internet.nl only tests port 25, but a client that cannot connect on 465 or
-# 993 is broken regardless of what the score says.
 mailcow_tls_checks:
   - {port: 25, starttls: "-starttls smtp"}
   - {port: 465, starttls: ""}
   - {port: 587, starttls: "-starttls smtp"}
   - {port: 993, starttls: ""}
 
-# The address the mail records must resolve to. Read from the same tfvars the
-# terraform side uses, so the two cannot drift apart silently.
+# Read from the same tfvars terraform uses, so the two cannot drift.
 mailcow_server_ipv4: "{{ (lookup('ansible.builtin.file', mailcow_terraform_dir ~ '/mail.auto.tfvars')
                           | regex_search('mail_server_ipv4\\s*=\\s*\"([^\"]+)\"', '\\1'))[0] }}"
 mailcow_server_ipv6: "{{ (lookup('ansible.builtin.file', mailcow_terraform_dir ~ '/mail.auto.tfvars')
                           | regex_search('mail_server_ipv6\\s*=\\s*\"([^\"]+)\"', '\\1'))[0] }}"
 
-# ------------------------------ Preflight ------------------------------ #
 # Set false only to build the stack knowing outbound mail will not deliver.
 mailcow_require_ptr: true
 mailcow_require_port25_egress: true

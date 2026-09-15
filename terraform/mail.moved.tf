@@ -1,23 +1,10 @@
-# ------------------------------------------------------------------ #
-#                   One-off key migration, kept forever                #
-# ------------------------------------------------------------------ #
-# mail.tf used to key cloudflare_dns_record.mail on the slot alone —
-# "domain/mx", "srv/_imaps._tcp" — because there was exactly one mail domain.
-# Going multi-domain made the domain part of the key, which Terraform reads as
-# "delete this instance, create that one".
+# One-off key migration, kept forever. Going multi-domain moved the domain into
+# the resource key, which Terraform reads as delete-then-create — and
+# terraform_apply.yml refuses any plan containing a delete.
 #
-# That is not a rename it can infer, and the consequence is not cosmetic: the
-# role's terraform_apply.yml refuses any plan containing a delete, so the very
-# first multi-domain run would have aborted — and forcing it through would have
-# torn down and rebuilt the live MX, SPF and DKIM of a working mail server.
-#
-# These blocks state the rename instead. They are no-ops once the state has
-# moved (and on any state that never had the old keys), so they are kept rather
-# than deleted: removing them would strand anyone restoring an older state.
-#
-# The literal "joachimjasmin.com" is deliberate. This is history, not
-# configuration — it records which domain those keys belonged to at the time,
-# and must not follow var.mail_domain if that ever changes.
+# No-ops once the state has moved, but kept: removing them would strand anyone
+# restoring an older state. The literal domain is history, not configuration,
+# and must not follow var.mail_domain.
 
 moved {
   from = cloudflare_zone_dnssec.mail[0]

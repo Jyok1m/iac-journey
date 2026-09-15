@@ -1,7 +1,6 @@
 ---
-# Traefik only requests a certificate for a host once a router exists for it,
-# and the router only exists once the stack is up — which is why this runs
-# after deploy rather than before.
+# Traefik only requests a certificate once a router exists, and the router only
+# exists once the stack is up — hence after deploy.
 
 - name: Enable the certificate sync path unit
   ansible.builtin.systemd_service:
@@ -56,8 +55,8 @@
   changed_when: false
   failed_when: false
 
-# The name in this certificate has to match the PTR and the HELO name, or
-# every receiver that checks them treats the sender as unverified.
+# Has to match the PTR and the HELO name, or receivers treat the sender as
+# unverified.
 - name: Assert the SMTP certificate carries the mail hostname
   ansible.builtin.assert:
     that:

@@ -79,20 +79,15 @@ services:
           memory: 64M
     volumes:
       - keys:/config/keys
-      ## Mount external docker socket
       - /var/run/docker.sock:/var/run/docker.sock
-      ## Allow Periphery to see processes outside of container
       - /proc:/proc
-      ## Same path inside and outside the container: Periphery hands compose
-      ## file paths to the host docker daemon.
+      ## Same path in and out: Periphery hands compose file paths to the
+      ## host daemon, which has to resolve them.
       - {{ komodo_periphery_root_dir }}:{{ komodo_periphery_root_dir }}
-      ## Stacks rendered by Ansible under /opt. Mounted at the same path for
-      ## the same reason as above: Periphery reads the compose files, and the
-      ## host daemon has to resolve the very paths Periphery hands it.
-      ## Read-write because Komodo writes a project .env into the run directory
-      ## on deploy — but Ansible stays the source of truth, so treat the file
-      ## editor in the Komodo UI as a debugging tool, not a place to change
-      ## anything you want to survive the next playbook run.
+      ## Stacks rendered by Ansible, same path for the same reason.
+      ## Read-write because Komodo writes a project .env on deploy — but
+      ## Ansible stays the source of truth, so the Komodo file editor is a
+      ## debugging tool, not somewhere to make a change that should survive.
       - {{ komodo_stacks_dir }}:{{ komodo_stacks_dir }}
     logging:
       driver: json-file

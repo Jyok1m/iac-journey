@@ -1,18 +1,8 @@
 ---
-# Computes the terraform inputs that cannot be written down ahead of time,
-# and does it before *every* terraform pass rather than only the last one.
-#
-# That matters more than it looks. Both mail_dkim and mail_mta_sts_serving
-# default to "absent" in the HCL, so a pass that omitted them once mailcow was
-# running would plan to delete a live DKIM record — a destructive plan, which
-# the guardrail then refuses, and the run dies on its second execution. Every
-# pass therefore reports the same current state, and a steady-state run plans
-# nothing.
-#
-# Both are now maps keyed by domain. A domain whose key is missing keeps its
-# record out of the plan, which is the correct state for a domain mailcow has
-# not generated a key for yet — and the reason the DKIM pass can add a fourth
-# domain later without touching the three that already work.
+# Runs before *every* terraform pass, not just the last: mail_dkim and
+# mail_mta_sts_serving default to absent in the HCL, so a pass that omitted
+# them would plan to delete a live DKIM record. Both are maps keyed by domain,
+# so a missing key keeps that record out of the plan without touching the rest.
 
 - name: Check whether the mailcow API is answering yet
   ansible.builtin.uri:
@@ -28,9 +18,8 @@
   changed_when: false
   no_log: true
 
-# Reset first, unconditionally. This file is imported once per terraform pass,
-# so facts left over from the earlier pass would survive a failed API probe in
-# the later one and quietly republish a stale key as though it were fresh.
+# Unconditional: facts left from the earlier pass would survive a failed probe
+# and republish a stale key as fresh.
 - name: Start each pass with no DKIM key and no served policy assumed
   ansible.builtin.set_fact:
     mailcow_dkim: {}
@@ -53,15 +42,10 @@
   loop: "{{ mailcow_domain_names }}"
   when: mailcow_api_probe.status | default(0) == 200
 
-# dkim_txt rather than pubkey: mailcow has already split a 2048-bit key across
-# the 255-byte character-string boundary, and reassembling that here would
-# reimplement the splitting badly.
-#
-# The empty-string guard is not defensive padding. mailcow answers 200 with
-# `{"dkim_txt": ""}` for a domain it knows but has not keyed, and writing that
-# through would publish an empty TXT at the selector — which is a syntactically
-# valid DKIM record meaning "this key is revoked, treat every signature as
-# broken".
+# dkim_txt and not pubkey: mailcow has already split the key across the
+# 255-byte boundary. The empty-string guard matters — mailcow answers 200 with
+# an empty dkim_txt for a domain it has not keyed, and publishing that is a
+# valid record meaning "revoked, treat every signature as broken".
 - name: Note the DKIM record value for each domain that has one
   ansible.builtin.set_fact:
     mailcow_dkim: "{{ mailcow_dkim | combine({item.item: item.json.dkim_txt}) }}"
@@ -74,10 +58,8 @@
     - item.json is defined
     - item.json.dkim_txt | default('') | length > 0
 
-# The policy is served dynamically by mailcow's PHP, so it only answers once
-# the stack is up and Traefik routes the name. Announcing the TXT before that
-# makes every sender fetch a 404 and file a TLS-RPT failure — and the failure
-# is per-domain, which is why the gate is too.
+# Announcing the TXT before the policy answers makes every sender fetch a 404
+# and file a TLS-RPT failure — per-domain, which is why the gate is too.
 - name: Check whether the MTA-STS policy is actually being served
   ansible.builtin.uri:
     url: "https://mta-sts.{{ item }}/.well-known/mta-sts.txt"
@@ -89,8 +71,7 @@
   failed_when: false
   changed_when: false
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
+  # A task-level `become: false` loses to ansible_become on a delegated task.
   vars:
     ansible_become: false
   loop: "{{ mailcow_mta_sts_domains }}"
@@ -106,22 +87,11 @@
   loop_control:
     label: "{{ item.item }}"
 
-# Whether this pass is allowed to rewrite the generated inputs at all.
-#
-# mail.generated.auto.tfvars is not a report of what mailcow says right now —
-# it is the last state terraform was told to publish. Overwriting it with
-# "nothing" because mailcow could not be reached is NOT a no-op: mail_dkim
-# defaults to absent in the HCL, so an empty map plans to DELETE the live DKIM
-# record of a working domain. The guardrail in terraform_apply.yml then refuses
-# the plan and kills the run — which is the correct outcome, but the run still
-# dies, and it dies on the first pass of every deploy where the stack happens
-# to be down. Which is exactly the pass whose job is to bring it back up.
-#
-# So the file is only rewritten when every question actually got an answer.
-# "mailcow says this domain has no key" is an answer — HTTP 200 with an empty
-# dkim_txt, which is the normal state of a domain that has not been created
-# yet — and it is written through. "mailcow did not answer" is not an answer,
-# and leaves the file exactly as it was.
+# mail.generated.auto.tfvars is the last state terraform was told to publish,
+# not a live report: overwriting it with nothing because mailcow was
+# unreachable plans to DELETE a working domain's DKIM record. So it is only
+# rewritten when every question got an answer — "no key yet" counts, "no
+# answer" does not.
 - name: Decide whether mailcow answered well enough to rewrite the inputs
   ansible.builtin.set_fact:
     mailcow_tf_vars_answered: >-
@@ -148,16 +118,14 @@
           {{ mailcow_api_url }}/api/v1/get/status/containers
   when: not mailcow_tf_vars_answered
 
-# Written into the terraform directory rather than passed as -var, so the
-# configuration stands on its own and a bare `terraform plan` is honest.
+# In the terraform directory rather than passed as -var, so a bare
+# `terraform plan` is honest.
 - name: Write the generated terraform inputs
   ansible.builtin.template:
     src: mail.generated.auto.tfvars.j2
     dest: "{{ mailcow_terraform_dir }}/mail.generated.auto.tfvars"
     mode: "0644"
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true

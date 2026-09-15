@@ -4,9 +4,8 @@ services:
     image: {{ jenkins_dind_image }}
     container_name: {{ jenkins_dind_container_name }}
     restart: unless-stopped
-    # Required to run a Docker daemon inside a container. This grants the
-    # container full control of the host kernel: anything that can reach the
-    # dind socket effectively has root here.
+    # Needed to run a Docker daemon in a container: anything that can reach
+    # the dind socket effectively has root on the host.
     privileged: true
     deploy:
       resources:
@@ -65,8 +64,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-      # Jenkins takes its time on a cold start; failing before it has finished
-      # loading plugins would just churn the container.
+      # Jenkins is slow on a cold start; failing before it has loaded its
+      # plugins would just churn the container.
       start_period: 180s
     volumes:
       - jenkins:/var/jenkins_home
@@ -84,12 +83,10 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      # Canonical host
       - traefik.http.routers.jenkins.rule=Host(`{{ jenkins_host }}`)
       - traefik.http.routers.jenkins.entrypoints=websecure
       - traefik.http.routers.jenkins.tls.certresolver=letsencrypt
       - traefik.http.services.jenkins.loadbalancer.server.port=8080
-      # Permanent redirect from the .fr to the canonical .com
       - traefik.http.routers.jenkins-redirect.rule=Host(`{{ jenkins_redirect_host }}`)
       - traefik.http.routers.jenkins-redirect.entrypoints=websecure
       - traefik.http.routers.jenkins-redirect.tls.certresolver=letsencrypt

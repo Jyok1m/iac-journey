@@ -1,12 +1,9 @@
 ---
-# Proves the result instead of asserting it. Everything here reads live state
-# — DNS from a public resolver, the certificate off the wire, the banner from
-# the port — so a green run means the outside world sees what we think it does.
+# Reads live state — DNS from a public resolver, the certificate off the wire,
+# the banner from the port.
 
-# Handlers otherwise fire at the end of the play, which is after this file.
-# On a run where the Postfix or Dovecot overrides changed, every cipher check
-# below would measure the configuration that is about to be replaced and the
-# summary would report a state that no longer exists.
+# Handlers otherwise fire after this file, and every check below would measure
+# a configuration that is about to be replaced.
 - name: Apply any pending restarts before measuring anything
   ansible.builtin.meta: flush_handlers
 
@@ -14,8 +11,7 @@
   ansible.builtin.command:
     argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", "{{ item.name }}", "{{ item.type }}"]
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
+  # A task-level `become: false` loses to ansible_become on a delegated task.
   vars:
     ansible_become: false
   run_once: true
@@ -35,11 +31,8 @@
   loop_control:
     label: "{{ item.item.type }} {{ item.item.name }}"
 
-# Read on the server, not from the control node. What this proves is that
-# MAILCOW_HOSTNAME reached Postfix's myhostname, and a local read settles that
-# completely. Whether 25 is reachable from outside is a different question,
-# asked below — many ISPs block outbound 25, and a control node behind one
-# would report a perfectly good mail server as broken.
+# On the server, not from the control node: this proves MAILCOW_HOSTNAME
+# reached Postfix's myhostname. External reachability is a separate question.
 - name: Read the SMTP banner on port 25
   ansible.builtin.command:
     cmd: >-
@@ -49,8 +42,8 @@
   register: mailcow_banner
   changed_when: false
 
-# The HELO name, the PTR and the certificate CN have to be the same string.
-# Every large receiver checks at least two of the three against each other.
+# HELO, PTR and certificate CN have to be the same string — every large
+# receiver checks at least two of the three against each other.
 - name: Assert the SMTP banner announces the mail hostname
   ansible.builtin.assert:
     that:
@@ -67,8 +60,6 @@
       timeout 20 openssl s_client -connect {{ mailcow_hostname }}:{{ item.port }}
       {{ item.starttls }} -servername {{ mailcow_hostname }}
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
@@ -91,15 +82,12 @@
   loop: "{{ mailcow_verify_tls.results }}"
   loop_control:
     label: "{{ item.item.port }}"
-  # rc, not the presence of "CONNECTED". An ISP that swallows port 25 still
-  # completes the TCP handshake, so openssl prints CONNECTED — and then
-  # "Verify return code: 0 (ok)" on a handshake that read zero bytes and saw
-  # no certificate at all. Only a zero exit means a real handshake happened.
+  # rc, not "CONNECTED": an ISP that swallows 25 still completes the TCP
+  # handshake and openssl still prints "Verify return code: 0 (ok)".
   when: item.rc == 0
 
-# A control node on a domestic connection usually cannot open port 25 at all,
-# which says nothing about the server. Name what could not be checked from
-# here rather than failing on it — or, worse, passing silently.
+# A domestic connection usually cannot open 25 at all, which says nothing about
+# the server. Name what went unchecked rather than failing or passing silently.
 - name: Note any port unreachable from the control node
   ansible.builtin.debug:
     msg: >-
@@ -116,12 +104,9 @@
          | map(attribute='item.port') | list }}
   when: mailcow_verify_tls.results | rejectattr('rc', 'eq', 0) | list | length > 0
 
-# Checked from the control node, over the public name, so this exercises the
-# whole path: DNS, Traefik's router, its certificate, and mailcow's nginx.
-# Its absence is why a broken Traefik rule went unnoticed while every other
-# check passed — a malformed rule fails the router silently and Traefik
-# answers its own 404, which looks identical to a healthy proxy with nothing
-# behind it.
+# Over the public name, so this exercises DNS, Traefik's router, its
+# certificate and mailcow's nginx. A malformed rule fails the router silently
+# and Traefik answers its own 404, which nothing else here would catch.
 - name: Fetch each HTTP surface over its public name
   ansible.builtin.uri:
     url: "https://{{ item.host }}{{ item.path }}"
@@ -157,15 +142,9 @@
   loop_control:
     label: "{{ item.item.name }}"
 
-# MTA-STS is reported, never asserted. This mailcow build answers 404 on
-# /.well-known/mta-sts.txt for every domain, so the gate in tf_vars.yml never
-# flips and the _mta-sts TXT is never published — which is the correct outcome:
-# announcing a policy nobody serves makes every sender fetch a 404 and file a
-# TLS-RPT failure against us. The CNAMEs and their certificates stay in place
-# so that the day upstream serves the policy, flipping it on is one run.
-#
-# Guarded on the fact being defined at all, because `--tags mailcow-verify`
-# alone never runs tf_vars.yml.
+# Reported, never asserted: this build answers 404 on the policy for every
+# domain, so the gate in tf_vars.yml never flips and the TXT stays unpublished.
+# Guarded on the fact existing — `--tags mailcow-verify` skips tf_vars.yml.
 - name: Report the MTA-STS state
   ansible.builtin.debug:
     msg: >-
@@ -186,8 +165,6 @@
   ansible.builtin.command:
     argv: [dig, +short, "@{{ mailcow_dns_resolvers | first }}", "{{ item }}", DS]
   delegate_to: localhost
-  # A task-level `become: false` does not override ansible_become for a
-  # delegated task — the variable wins. This has to be set as a var.
   vars:
     ansible_become: false
   run_once: true
@@ -202,15 +179,9 @@
     mailcow_zones_unsigned: >-
       {{ mailcow_ds.results | rejectattr('stdout', 'truthy') | map(attribute='item') | list }}
 
-# Not fatal — the mail server works unsigned. But DANE is impossible without
-# it and internet.nl scores DNSSEC as a full fifth of the total, so a silent
-# pass here would misrepresent how finished this is.
-#
-# Two separate reasons a zone lands in this list, and they need different
-# actions: it may not be in mail_dnssec_domains at all, in which case
-# Cloudflare is not signing it and nothing is pending; or it is signed there
-# and only the DS is missing at the registrar. `terraform output` tells the
-# two apart — a zone absent from the output is the first case.
+# Not fatal, but DANE is impossible without it. Two reasons a zone lands here,
+# needing different actions: absent from mail_dnssec_domains, or signed and
+# only missing its DS at the registrar. `terraform output` tells them apart.
 - name: Report the zones that are still unsigned
   ansible.builtin.debug:
     msg: |

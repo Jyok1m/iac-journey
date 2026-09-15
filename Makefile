@@ -10,13 +10,8 @@ help:
 	@echo "mail        déploie le serveur mail de bout en bout (DNS compris)"
 	@echo "mail-check  dry-run du rôle mailcow"
 
-# ------------------------------------------------------------------ #
-#                                Mail                                #
-# ------------------------------------------------------------------ #
-# L'unique point d'entrée : d'une machine nue à un serveur mail vérifié.
-# Terraform est piloté par le rôle, sur le nœud de contrôle — rien à lancer
-# à la main. TAGS=... pour ne rejouer qu'une étape (mailcow-dns,
-# mailcow-certs, mailcow-sso, mailcow-verify...).
+# D'une machine nue à un serveur mail vérifié. Terraform est piloté par le rôle,
+# rien à lancer à la main. TAGS=... pour ne rejouer qu'une étape.
 
 TAGS ?= mail
 
@@ -25,10 +20,6 @@ mail:
 
 mail-check:
 	ansible-playbook ansible/site.yml --tags "$(TAGS)" --check --diff
-
-# ------------------------------------------------------------------ #
-#                            Ansible Vault                           #
-# ------------------------------------------------------------------ #
 
 encrypt:
 	@for f in $(VAULT_FILES); do \

@@ -1,15 +1,12 @@
 ---
-# Default Role
 n8n_app_name: n8n
 n8n_app_dir: /opt/{{ n8n_app_name }}
 
-# Service Postgres
 n8n_db_image: postgres:14.22-trixie@sha256:eba8ddbdd837ecfbb6ca8a26d8deec68a2f9b076660102ae641dba0f371c099b
 n8n_db_container_name: n8n-db
 n8n_db_env_file: n8n-db.env
 n8n_db_name: n8n
 
-# Service n8n
 n8n_image: n8nio/n8n:2.21.1@sha256:81310992ea0998ca0114d3909ef35fe4edcb5d92ec531aeb64909c698573f30d
 n8n_container_name: n8n
 n8n_env_file: n8n.env

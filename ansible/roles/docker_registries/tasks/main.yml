@@ -10,8 +10,7 @@
   ansible.builtin.set_fact:
     docker_registries_selected: "{{ docker_registries_all | selectattr('enabled') | list }}"
 
-# Fail on the missing credential rather than on a login that reports a
-# confusing 401 half a play later.
+# Fail here rather than on a confusing 401 half a play later.
 - name: Validate the credentials of the enabled registries
   ansible.builtin.assert:
     that:
@@ -25,13 +24,9 @@
   loop_control:
     label: "{{ item.name }}"
 
-# Writes /root/.docker/config.json, which is what `docker push` and the Jenkins
-# image push read. Credentials are stored base64-encoded, not encrypted.
-#
-# no_log is mandatory here: a failure would otherwise echo the module arguments
-# back, token included. It also swallows which registry refused, so the login
-# is allowed to fail and is reported by name below instead of aborting the loop
-# on the first rejection and hiding the rest.
+# no_log is mandatory: a failure would otherwise echo the token back. It also
+# swallows which registry refused, hence the report below rather than an abort
+# on the first rejection.
 - name: Log in to the registries
   community.docker.docker_login:
     registry_url: "{{ item.registry_url }}"
@@ -44,14 +39,12 @@
     label: "{{ item.name }}"
   no_log: true
   register: docker_registries_login
-  # ignore_errors, not failed_when: false — the latter overwrites `failed` with
-  # false in the result, so the report below could never see a rejection.
+  # Not failed_when: false — that overwrites `failed` in the result, and the
+  # report below could never see a rejection.
   ignore_errors: true
 
-# no_log censors the console output of the login task, but the registered
-# variable keeps the real result — so the module's own error message can be
-# surfaced here. It carries the reason, not the credentials; the token only
-# ever appears in the module arguments, which stay hidden.
+# no_log censors the console, but the registered variable keeps the real
+# result — and the module's message carries the reason, not the credentials.
 - name: Report the outcome for each registry
   ansible.builtin.debug:
     msg: >-

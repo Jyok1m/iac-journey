@@ -1,9 +1,6 @@
-# Ansible managed — do not edit manually.
-#
-# Certificates renew on Traefik's schedule, not Ansible's. Without this, a
-# renewal three months from now would reach the web UI and leave Postfix and
-# Dovecot serving an expired certificate until someone happened to re-run the
-# playbook.
+# Ansible managed. Certificates renew on Traefik's schedule, not Ansible's:
+# without this, Postfix and Dovecot would serve an expired one until the next
+# playbook run.
 
 [Unit]
 Description=Watch Traefik's ACME store for certificates mailcow needs
