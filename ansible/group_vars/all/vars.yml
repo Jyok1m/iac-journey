@@ -4,6 +4,6 @@ portfolio_domain_fr: joachimjasmin.fr
 
 heirloom_domain: heirloom-app.com
 
-# vRack — OVH private network. This subnet is what the firewall trusts as an
+# vRack (OVH private network). This subnet is what the firewall trusts as an
 # intra-cluster source; each host's own address lives in its host_vars.
 vrack_subnet: 10.42.0.0/24

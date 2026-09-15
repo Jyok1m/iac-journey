@@ -39,19 +39,19 @@
     label: "{{ item.name }}"
   no_log: true
   register: docker_registries_login
-  # Not failed_when: false — that overwrites `failed` in the result, and the
+  # Not failed_when: false, which overwrites `failed` in the result, and the
   # report below could never see a rejection.
   ignore_errors: true
 
 # no_log censors the console, but the registered variable keeps the real
-# result — and the module's message carries the reason, not the credentials.
+# result, and the module's message carries the reason, not the credentials.
 - name: Report the outcome for each registry
   ansible.builtin.debug:
     msg: >-
       {{ item.0.name }} ({{ item.0.registry_url }}) :
       {{ 'authenticated -> ' ~ docker_registries_config_path
          if not (item.1.failed | default(false))
-         else 'REFUSED — ' ~ (item.1.msg | default('no message returned')) }}
+         else 'REFUSED: ' ~ (item.1.msg | default('no message returned')) }}
   loop: "{{ docker_registries_selected | zip(docker_registries_login.results) | list }}"
   loop_control:
     label: "{{ item.0.name }}"

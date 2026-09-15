@@ -47,7 +47,7 @@ des plays dans `site.yml` le garantit.
 
 ## Ordre d'exécution
 
-Terraform d'abord — les rôles Ansible génèrent des routeurs Traefik qui
+Terraform d'abord : les rôles Ansible génèrent des routeurs Traefik qui
 supposent que les enregistrements DNS résolvent déjà, sinon Let's Encrypt
 échoue sur le challenge HTTP-01.
 
@@ -76,7 +76,7 @@ ansible-playbook ansible/site.yml --tags ipseis         # une seule stack
 Le tag `setup` est le seul qui peut te couper l'accès : il change le port
 d'écoute de sshd et active ufw. `hardening_ssh_port` est dérivé de
 `vault_ansible_port`, donc le port que sshd écoute et celui qu'Ansible compose
-sont la même variable — mais garde une session ouverte pendant le premier run,
+sont la même variable, mais garde une session ouverte pendant le premier run,
 et vérifie que le port est bien dans `hardening_ufw_allowed_ports` avant de
 lancer.
 
@@ -92,7 +92,7 @@ systemctl list-timers 'backup-mongo-*'          # prochaine exécution
 journalctl -u backup-mongo-ipseis.service       # dernier dump
 restic snapshots --tag ipseis                   # ce qui est réellement stocké
 
-# Restauration — --drop écrase les collections existantes
+# Restauration : --drop écrase les collections existantes
 backup-mongo-restore-ipseis.sh latest --drop
 ```
 
@@ -116,7 +116,7 @@ pas.
 Les identifiants vivent dans `ansible/vaults/registries.yml`, à éditer avec
 `ansible-vault edit` (qui rechiffre à la sauvegarde). Un registre activé sans
 identifiant fait échouer le play sur une assertion qui le nomme, avant toute
-tentative de connexion — et comme le play `setup` passe en premier, cet échec
+tentative de connexion, et comme le play `setup` passe en premier, cet échec
 arrête tout le reste du déploiement.
 
 Vérifier l'état réel sur l'hôte :
@@ -145,8 +145,8 @@ en place :
 
 Les secrets vivent dans des fichiers Ansible Vault, jamais en clair :
 
-- `ansible/vaults/<rôle>.yml` — chargés par `vars_files` dans le play concerné
-- `ansible/host_vars/main/vault.yml` — connexion SSH (`ansible_host`, `ansible_port`)
+- `ansible/vaults/<rôle>.yml` : chargés par `vars_files` dans le play concerné
+- `ansible/host_vars/main/vault.yml` : connexion SSH (`ansible_host`, `ansible_port`)
 
 Les variables sont **préfixées par le rôle** (`heirloom_vault_db_user`,
 `keycloak_vault_db_user`, …). C'est ce qui empêche deux stacks de se marcher
@@ -165,7 +165,7 @@ chiffré, et un hook qui refuse tout `.env` en clair.
 ## Vérifications
 
 Pas de CI : les contrôles tournent en local, et pre-commit est donc le seul
-garde-fou — il ne protège rien si les hooks ne sont pas installés
+garde-fou. Il ne protège rien si les hooks ne sont pas installés
 (`pre-commit install`) ou si un commit passe en `--no-verify`.
 
 ```bash
@@ -176,5 +176,5 @@ cd terraform && terraform fmt -check -recursive && terraform validate
 À savoir si la question d'une CI revient : `ansible-lint` a besoin du fichier
 pointé par `vault_password_file` dans `ansible.cfg`, sinon il échoue au
 chargement de la config. Et son `--syntax-check` déchiffre réellement les
-`vars_files` de `site.yml` — linter le playbook complet ailleurs qu'en local
+`vars_files` de `site.yml`, donc linter le playbook complet ailleurs qu'en local
 suppose donc d'exposer le mot de passe du vault.

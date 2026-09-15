@@ -1,5 +1,5 @@
 # One-off key migration, kept forever. Going multi-domain moved the domain into
-# the resource key, which Terraform reads as delete-then-create — and
+# the resource key, which Terraform reads as delete-then-create, and
 # terraform_apply.yml refuses any plan containing a delete.
 #
 # No-ops once the state has moved, but kept: removing them would strand anyone

@@ -1,7 +1,7 @@
 ---
 # Derived from mailcow_domains, hence vars/ and not defaults/: a host_vars
 # override here would silently disagree with the domain list terraform uses.
-# The per-domain lists are a rendered YAML fragment parsed back — Jinja has no
+# The per-domain lists are a rendered YAML fragment parsed back: Jinja has no
 # comprehension, and the product/map/join chain is unreadable.
 
 mailcow_domain_names: >-
@@ -14,7 +14,7 @@ mailcow_mta_sts_domains: >-
   {{ mailcow_domains | selectattr('mta_sts') | map(attribute='name') | list }}
 
 # mailcow's nginx answers with the wrong site for a server_name it does not
-# know, so each of these must be in ADDITIONAL_SERVER_NAMES too — and each is
+# know, so each of these must be in ADDITIONAL_SERVER_NAMES too, and each is
 # one more certificate to renew, hence the per-domain switch.
 mailcow_additional_server_names: >-
   {{ (['autodiscover', 'autoconfig'] | product(mailcow_client_autoconfig_domains) | map('join', '.') | list)
@@ -51,7 +51,7 @@ _mailcow_dns_verify_extra_yaml: |
   {% endfor %}
 
 # Specific paths, not /: autodiscover and autoconfig 404 at the root by design.
-# mta-sts is deliberately absent — this build does not serve the policy at all,
+# mta-sts is deliberately absent: this build does not serve the policy at all,
 # so asserting on it would fail a working deployment. tf_vars.yml gates the TXT
 # on a live 200 instead, and verify.yml reports rather than fails.
 mailcow_http_checks: >-

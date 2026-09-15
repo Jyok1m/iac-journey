@@ -14,7 +14,7 @@ komodo_backups_path: /etc/komodo/backups
 
 komodo_periphery_image: moghtech/komodo-periphery:2.3@sha256:637bf3c03a84f04821c902eba12f63e527ea1f781a350489aa34f17f48f36e57
 komodo_periphery_container_name: "{{ komodo_app_name }}-periphery"
-# Stacks, repos and builds. Also in the env file — the agent reads it at
+# Stacks, repos and builds. Also in the env file: the agent reads it at
 # runtime.
 komodo_periphery_root_dir: /etc/komodo
 # Mounted into Periphery so a Resource Sync can point run_directory at the very

@@ -43,7 +43,7 @@
   when: mailcow_api_probe.status | default(0) == 200
 
 # dkim_txt and not pubkey: mailcow has already split the key across the
-# 255-byte boundary. The empty-string guard matters — mailcow answers 200 with
+# 255-byte boundary. The empty-string guard matters: mailcow answers 200 with
 # an empty dkim_txt for a domain it has not keyed, and publishing that is a
 # valid record meaning "revoked, treat every signature as broken".
 - name: Note the DKIM record value for each domain that has one
@@ -59,7 +59,7 @@
     - item.json.dkim_txt | default('') | length > 0
 
 # Announcing the TXT before the policy answers makes every sender fetch a 404
-# and file a TLS-RPT failure — per-domain, which is why the gate is too.
+# and file a TLS-RPT failure, per-domain, which is why the gate is too.
 - name: Check whether the MTA-STS policy is actually being served
   ansible.builtin.uri:
     url: "https://mta-sts.{{ item }}/.well-known/mta-sts.txt"
@@ -90,7 +90,7 @@
 # mail.generated.auto.tfvars is the last state terraform was told to publish,
 # not a live report: overwriting it with nothing because mailcow was
 # unreachable plans to DELETE a working domain's DKIM record. So it is only
-# rewritten when every question got an answer — "no key yet" counts, "no
+# rewritten when every question got an answer: "no key yet" counts, "no
 # answer" does not.
 - name: Decide whether mailcow answered well enough to rewrite the inputs
   ansible.builtin.set_fact:

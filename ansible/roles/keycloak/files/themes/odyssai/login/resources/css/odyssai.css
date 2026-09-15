@@ -482,7 +482,7 @@ input[type="submit"]:disabled {
 
    Seuls template.ftl et login.ftl sont surcharges ici : inscription,
    reinitialisation de mot de passe, OTP, conditions d'utilisation et pages
-   d'information sortent telles quelles de base. Leur balisage est fige — c'est
+   d'information sortent telles quelles de base. Leur balisage est fige, c'est
    donc au style de s'y adapter, plutot qu'a une copie des gabarits qui
    divergerait a chaque montee de version de Keycloak. */
 

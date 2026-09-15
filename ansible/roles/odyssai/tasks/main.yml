@@ -67,7 +67,7 @@
   community.docker.docker_compose_v2_pull:
     project_src: "{{ odyssai_app_dir }}"
 
-# auto recreates a container whose image ID moved — a fresh push on :dev
+# auto recreates a container whose image ID moved, so a fresh push on :dev
 # bounces the dev copy and leaves production alone.
 - name: Deploy services
   community.docker.docker_compose_v2:

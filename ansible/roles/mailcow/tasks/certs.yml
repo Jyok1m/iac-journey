@@ -1,6 +1,6 @@
 ---
 # Traefik only requests a certificate once a router exists, and the router only
-# exists once the stack is up — hence after deploy.
+# exists once the stack is up, hence after deploy.
 
 - name: Enable the certificate sync path unit
   ansible.builtin.systemd_service:

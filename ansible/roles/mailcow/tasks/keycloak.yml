@@ -30,7 +30,7 @@
     realm: "{{ mailcow_keycloak_realm }}"
     client_id: "{{ mailcow_keycloak_client_id }}"
     name: mailcow
-    description: Mail server web UI — managed by the ansible mailcow role
+    description: Mail server web UI, managed by the ansible mailcow role
     protocol: openid-connect
     # Confidential: mailcow holds a client secret and uses the service account.
     public_client: false

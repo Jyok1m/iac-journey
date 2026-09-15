@@ -1,5 +1,5 @@
 ---
-# In the unit, script and env file names, so [a-z0-9_-] only — asserted.
+# In the unit, script and env file names, so [a-z0-9_-] only (asserted).
 backup_mongo_name: ""
 
 # Reached over a Docker network, never a published port: the dump runner joins

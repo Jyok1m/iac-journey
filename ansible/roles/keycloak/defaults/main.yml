@@ -27,7 +27,7 @@ keycloak_odyssai_smtp_port: 587
 
 # Un client par front : un client ne porte qu'un seul baseUrl, dont Keycloak se
 # sert comme repli quand il a perdu le contexte. Partage, il renvoyait toujours
-# sur l'autre front — et le client deploye devait accepter localhost.
+# sur l'autre front, et le client deploye devait accepter localhost.
 keycloak_odyssai_realms:
   - name: odyssai-prod
     display_name: OdyssAI

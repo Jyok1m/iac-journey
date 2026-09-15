@@ -1,7 +1,7 @@
 ---
 # Ordering is the whole problem this role solves: the DKIM key cannot exist
 # before the stack runs and the domain is created, and ACME cannot succeed
-# before DNS resolves — hence two terraform passes rather than one.
+# before DNS resolves, hence two terraform passes rather than one.
 
 - name: Refuse to build on a host that cannot deliver mail
   ansible.builtin.import_tasks: preflight.yml

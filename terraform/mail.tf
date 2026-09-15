@@ -2,7 +2,7 @@
 # ten unrelated apex/wildcard records in its blast radius.
 #
 # Every record here is unproxied: the apex and wildcard are proxied, so an
-# exact-name record is what keeps these off the Cloudflare edge — an MX
+# exact-name record is what keeps these off the Cloudflare edge: an MX
 # pointing at the HTTP proxy accepts no SMTP.
 #
 # One host, several domains: mail_hostname is shared, so there is one A/AAAA,
@@ -30,7 +30,7 @@ locals {
   )
 
   # Served over HTTPS by Traefik, so they must reach the host directly for
-  # ACME — CNAMEs onto the unproxied hostname, not proxied records.
+  # ACME: CNAMEs onto the unproxied hostname, not proxied records.
   mail_client_aliases = ["autodiscover", "autoconfig"]
 
   # docs.mailcow.email/getstarted/prerequisite-dns/
@@ -58,7 +58,7 @@ locals {
   # TXT strings cap at 255 bytes and Cloudflare stores a long value already
   # split; sending a ~420-byte DKIM key as one string makes every plan show an
   # update that never converges. mailcow's dkim_txt is sometimes pre-split, so
-  # the quoting is stripped and reapplied here — one place, one rule.
+  # the quoting is stripped and reapplied here, one place, one rule.
   mail_dkim_raw = {
     for d, txt in var.mail_dkim : d => replace(replace(txt, "\" \"", ""), "\"", "")
     if txt != "" && contains(keys(var.mail_domains), d)
@@ -203,7 +203,7 @@ locals {
     }
   }
 
-  # RFC 7489 §7.1 — external destination authorisation. Reports for every
+  # RFC 7489 §7.1, external destination authorisation. Reports for every
   # domain land in one mailbox, and without these records a receiver silently
   # sends nothing. The check is on the literal domain, so mail.<domain> needs
   # one too. zone_ids is indexed directly: an unmanaged report zone is a
@@ -248,7 +248,7 @@ locals {
 }
 
 # DANE is unreachable without this: a TLSA RRset that is not DNSSEC-secure is
-# ignored. Signing alone is safe — the zone stays unvalidated until a DS is
+# ignored. Signing alone is safe: the zone stays unvalidated until a DS is
 # published at the registrar, which nothing here can reach, so the DS values
 # are surfaced as an output instead.
 resource "cloudflare_zone_dnssec" "mail" {
@@ -259,7 +259,7 @@ resource "cloudflare_zone_dnssec" "mail" {
 
   lifecycle {
     # Stays "pending" until Cloudflare detects the DS at the registrar, and no
-    # API call moves it on — without this an empty plan is unreachable. The
+    # API call moves it on, and without this an empty plan is unreachable. The
     # role's verify step reports which zones are actually unsigned.
     ignore_changes = [status]
   }
@@ -276,5 +276,5 @@ resource "cloudflare_dns_record" "mail" {
   data     = try(each.value.data, null)
   priority = try(each.value.priority, null)
   proxied  = try(each.value.proxied, null)
-  comment  = "mailcow — terraform, driven by the ansible mailcow role"
+  comment  = "mailcow: terraform, driven by the ansible mailcow role"
 }

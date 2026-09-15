@@ -1,5 +1,5 @@
 # Mail DNS inputs that are known ahead of time and edited by hand.
-# The values that cannot be — the DKIM keys and the MTA-STS switches — are
+# The values that cannot be (the DKIM keys and the MTA-STS switches) are
 # written by the ansible mailcow role into mail.generated.auto.tfvars.
 # No secret here, and none there either: a DKIM public key is published in
 # DNS by definition.
@@ -9,7 +9,7 @@
 # ------------------------------------------------------------------ #
 # One host serves every domain below. This name is the SMTP HELO name, the
 # PTR target and the CN of the certificate on 25/465/587, so it is a property
-# of the machine and not of any one domain — adding a domain does not add a
+# of the machine and not of any one domain: adding a domain does not add a
 # hostname, an address, a certificate or a reverse record.
 mail_hostname = "mail.joachimjasmin.com"
 
@@ -27,7 +27,7 @@ mail_server_ipv6_prefix = "2001:41d0:1004:2654::/64"
 # ------------------------------------------------------------------ #
 #                              The domains                           #
 # ------------------------------------------------------------------ #
-# Every key must also be a key of zone_ids — the records go into that zone.
+# Every key must also be a key of zone_ids: the records go into that zone.
 #
 # mta_sts_id has to change whenever the policy body changes, and it is
 # per-domain because the announcement is per-domain. The convention is the
@@ -61,7 +61,7 @@ mail_domains = {
 # ------------------------------------------------------------------ #
 # One destination for all three domains. Because those mailboxes sit outside
 # ipseis.eu and odyssai.app, RFC 7489 makes the reports conditional on an
-# authorisation record in this zone — mail.tf derives and publishes those.
+# authorisation record in this zone: mail.tf derives and publishes those.
 mail_dmarc_policy = "reject"
 mail_dmarc_rua    = "dmarc@joachimjasmin.com"
 mail_tlsrpt_rua   = "tls-reports@joachimjasmin.com"
@@ -70,7 +70,7 @@ mail_tlsrpt_rua   = "tls-reports@joachimjasmin.com"
 #                               DNSSEC                               #
 # ------------------------------------------------------------------ #
 # Signing a zone at Cloudflare is free and reversible, but the chain of trust
-# only closes once that zone's DS is pasted at its own registrar — and each of
+# only closes once that zone's DS is pasted at its own registrar, and each of
 # these three is registered somewhere different. Only the zone that has been
 # through that is listed; add the others here once you are ready to publish
 # their DS, and read the values out with

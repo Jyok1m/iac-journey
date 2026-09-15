@@ -1,5 +1,5 @@
 terraform {
-  # variables.tf marks the Cloudflare token `ephemeral` — 1.10 and later.
+  # variables.tf marks the Cloudflare token `ephemeral` (1.10 and later).
   # Without the pin an older control node fails on a parse error instead.
   required_version = ">= 1.10"
 

@@ -10,7 +10,7 @@
     mode: "0750"
 
 # Docker would create these itself, but only as root-owned directories at
-# container start — which hides the ownership decision.
+# container start, which hides the ownership decision.
 - name: Create upload directories
   ansible.builtin.file:
     path: "{{ ipseis_app_dir }}/{{ item }}"

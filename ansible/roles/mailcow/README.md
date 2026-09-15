@@ -17,11 +17,11 @@ not ours.
 
 `mail.joachimjasmin.com` is the only hostname. It is the SMTP HELO name, the
 PTR target and the CN of the certificate on 25/465/587, and those three have to
-agree — so it belongs to the machine, not to any one domain. Adding a domain
+agree, so it belongs to the machine, not to any one domain. Adding a domain
 adds no hostname, no address, no certificate and no reverse record.
 
 What is per-domain is everything a receiver checks against the envelope
-sender — MX, SPF, DKIM, DMARC, TLS-RPT, MTA-STS — plus the domain and its
+sender (MX, SPF, DKIM, DMARC, TLS-RPT, MTA-STS), plus the domain and its
 mailboxes inside mailcow.
 
 | Domain | Mailboxes | Client autoconfig |
@@ -33,7 +33,7 @@ mailboxes inside mailcow.
 Each address is an ordinary mailbox with its own password, so every app
 authenticates on submission as itself: a leaked password sends as one address,
 not as the domain. Passwords live in `mailcow_vault_mailboxes`, **keyed by the
-full address** — `no-reply` exists on two of these domains, and a map keyed on
+full address** : `no-reply` exists on two of these domains, and a map keyed on
 the local part alone would have silently given them one shared password.
 
 `client_autoconfig` is off for `odyssai.app` because nothing there is ever
@@ -42,8 +42,8 @@ records and two DAV hints, and each of those two names becomes a certificate
 Traefik has to keep renewing. `mta_sts` is a separate switch and stays on
 everywhere: that one is about how other MTAs deliver to us.
 
-The domain list is written down twice — `mailcow_domains` in this role,
-`mail_domains` in `terraform/mail.auto.tfvars` — because there is no file a
+The domain list is written down twice (`mailcow_domains` in this role,
+`mail_domains` in `terraform/mail.auto.tfvars`) because there is no file a
 tfvars and an Ansible role can both read. Preflight compares them and refuses
 to run if they disagree. A domain in one and not the other fails in a way that
 looks like a working deployment: mailboxes whose mail has no MX, or an MX for
@@ -81,7 +81,7 @@ resolver returning it; `ptr` refuses to continue if the reverse is wrong;
 rather than only the second. That detail is load-bearing. `mail_dkim` and
 `mail_mta_sts_serving` both default to "absent" in the HCL, so a pass that
 omitted them once mailcow was running would plan to **delete** a live DKIM
-record — a destructive plan, which the guardrail then refuses, killing the run
+record, a destructive plan, which the guardrail then refuses, killing the run
 on its second execution. Recomputing every time means a steady-state run plans
 nothing at all.
 
@@ -93,8 +93,8 @@ generates the key, while the three that already work stay untouched.
 The corollary is that the generated file must never be rewritten from an
 unanswered question. It is not a report of what mailcow says right now; it is
 the last state terraform was told to publish. On the first pass of any deploy
-the stack is down — that pass is what publishes the DNS the stack needs to come
-up — so the API returns nothing, and writing that through as an empty map plans
+the stack is down: that pass is what publishes the DNS the stack needs to come
+up, so the API returns nothing, and writing that through as an empty map plans
 to **delete** a live DKIM record. The guardrail refuses it, correctly, and the
 run dies before it can bring anything up. `tf_vars.yml` therefore only rewrites
 the file when every domain actually answered. "This domain has no key" (HTTP
@@ -117,7 +117,7 @@ its blast radius.
 Going multi-domain moved every key of that resource from `<slot>` to
 `<domain>/<slot>`, which Terraform reads as delete-then-create. `mail.moved.tf`
 states the rename instead. Those blocks are no-ops once the state has moved and
-are kept rather than deleted — without them, a restored older state would plan
+are kept rather than deleted: without them, a restored older state would plan
 to tear down and rebuild the live MX, SPF and DKIM of a working mail server,
 and the guardrail would (correctly) abort the run instead.
 
@@ -127,7 +127,7 @@ Two things, both because no credential in this repo can reach them:
 
 | Action | Where | Why it cannot be automated |
 | --- | --- | --- |
-| PTR / rDNS for both addresses → `mail.joachimjasmin.com` | OVH manager | Reverse DNS is delegated to whoever owns the IP block. The role fails with the exact click path if it is wrong. One PTR covers every domain — the hostname is shared. |
+| PTR / rDNS for both addresses → `mail.joachimjasmin.com` | OVH manager | Reverse DNS is delegated to whoever owns the IP block. The role fails with the exact click path if it is wrong. One PTR covers every domain, the hostname is shared. |
 | DS records | each zone's registrar | The zones are on Cloudflare but registered elsewhere, and the three are registered in three different places. `terraform output mail_dnssec_ds` prints the value for each signed zone. |
 
 Only `joachimjasmin.com` is listed in `mail_dnssec_domains` today. Signing the
@@ -139,20 +139,20 @@ waiting on its registrar (`pending`).
 
 ## Deviations from the official documentation
 
-**CONF-1 — `mailcow.conf` is templated, `generate_config.sh` is never run.**
+**CONF-1 : `mailcow.conf` is templated, `generate_config.sh` is never run.**
 The script is interactive, it overwrites rather than merges, and its IPv6 step
-offers to rewrite `/etc/docker/daemon.json` and restart the Docker daemon —
+offers to rewrite `/etc/docker/daemon.json` and restart the Docker daemon,
 which on this host would bounce nine unrelated stacks. Templating it also makes
 the four values it randomises (`DBPASS`, `DBROOT`, `REDISPASS`,
 `SOGO_URL_ENCRYPTION_KEY`) come from ansible-vault, so a rebuild reaches the
 same state instead of a new one. Every variable the script would have written
 is present in the template.
 
-**TLS-1 — the Postfix cipher list is overridden, but not with upstream's own
+**TLS-1 : the Postfix cipher list is overridden, but not with upstream's own
 recipe.** mailcow's defaults fail internet.nl: `smtpd_tls_ciphers` is unset and
 falls back to Postfix's `medium`, whose exclusion list removes fixed DH but not
 static-RSA key exchange, so port 25 still offers `AES256-GCM-SHA384` and
-SHA-1-MAC suites — graded "insufficient", a zero rather than a warning. The
+SHA-1-MAC suites, graded "insufficient", a zero rather than a warning. The
 hardening recipe in mailcow's docs fixes that but writes
 `smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1`, and the postfix
 container's entrypoint greps for exactly that shape; on a match it appends
@@ -161,14 +161,14 @@ container, re-permitting SHA-1 in TLS 1.2 signature algorithms. `extra.cf` here
 uses the `>=TLSv1.2` form, which expresses the same policy without matching
 that grep.
 
-**SPF-1 — SPF authorises by literal address, not `v=spf1 mx a -all`.** The
+**SPF-1 : SPF authorises by literal address, not `v=spf1 mx a -all`.** The
 documented example includes `a`, which resolves the apex. The apex here is
 Cloudflare-proxied, so `a` would authorise every Cloudflare edge address to
 send as this domain. The IPv6 term covers the routed `/64` rather than the
 single configured address, because Docker's NAT66 source selection is not
 pinned to it.
 
-**CERT-1 — `SKIP_LETS_ENCRYPT=y`; Traefik is the only ACME client.** This is
+**CERT-1 : `SKIP_LETS_ENCRYPT=y`; Traefik is the only ACME client.** This is
 the external-certificate path upstream documents ("use any external ACME
 client… copied to the correct location and a post-hook reloads affected
 containers"). The post-hook is a systemd `.path` unit watching Traefik's
@@ -178,22 +178,22 @@ marked community-supported and its container names use Compose v1 naming
 (`mailcow_postfix-mailcow_1`) against a project that produces
 `mailcowdockerized-postfix-mailcow-1`.
 
-**IPV6-1 — `ENABLE_IPV6=false` inside mailcow's bridge.** Turning it on
+**IPV6-1 : `ENABLE_IPV6=false` inside mailcow's bridge.** Turning it on
 requires `/etc/docker/daemon.json` and a daemon restart, which would bounce
-every other stack. Inbound IPv6 to the published ports works anyway —
-docker-proxy listens on `[::]` regardless — and that is what internet.nl's
+every other stack. Inbound IPv6 to the published ports works anyway
+(docker-proxy listens on `[::]` regardless), and that is what internet.nl's
 reachability subtest measures. The cost is that Postfix sees the bridge gateway
 rather than the real source address for IPv6 connections. Revisit once the IPv6
 PTR exists.
 
-**SSO-1 — Keycloak covers the web UI, and that is all it can cover.** Mode
+**SSO-1 : Keycloak covers the web UI, and that is all it can cover.** Mode
 `keycloak` rather than `generic-oidc`: mailcow's `user_login()` switches on
 `authsource` with cases for `keycloak`, `ldap` and `mailcow` only, so a mailbox
 marked `generic-oidc` matches nothing and falls through to `return false`.
 
 IMAP and SMTP **do not** go through Keycloak and cannot today. Dovecot in
-mailcow advertises `auth_mechanisms = plain login` and nothing else — no
-OAUTHBEARER, no XOAUTH2 — and Postfix delegates SASL to that same passdb.
+mailcow advertises `auth_mechanisms = plain login` and nothing else (no
+OAUTHBEARER, no XOAUTH2), and Postfix delegates SASL to that same passdb.
 mailcow's "mailpassword flow" looks like it closes this gap and does not: it
 compares the offered password against a bcrypt hash stored in a Keycloak *user
 attribute*, fetched over the Admin REST API. The credential Keycloak holds is
@@ -216,8 +216,8 @@ per domain into `/etc/sogo/sogo.conf`. Nothing re-reads it afterwards, and
 nothing in the stack restarts SOGo when mailcow gains a domain.
 
 The failure this produces is worth naming because it does not look like what it
-is. Every mailbox in the new domain authenticates against mailcow perfectly —
-the UI log records `logged_in_as` with `Provider: mailcow` — and then the
+is. Every mailbox in the new domain authenticates against mailcow perfectly
+(the UI log records `logged_in_as` with `Provider: mailcow`), and then the
 redirect to the webmail answers **Unauthorized**. IMAP and SMTP keep working
 throughout, because Dovecot and Postfix read the database live. So it reads as
 a bad password on an account whose password is demonstrably good.
@@ -237,7 +237,7 @@ months. So the gate holds and the TXT stays unpublished.
 
 That is the right outcome, not a bug to route around. Announcing `v=STSv1` for
 a policy nobody serves makes every sending MTA fetch a 404, fail closed or fall
-back depending on its implementation, and file a TLS-RPT failure against us —
+back depending on its implementation, and file a TLS-RPT failure against us,
 strictly worse than not announcing at all.
 
 What is published is the `mta-sts.<domain>` CNAME and its certificate, on all
@@ -250,7 +250,7 @@ policy. `verify` reports the state and does not fail on it.
 `var.mail_tlsa` exists and renders correctly, but nothing fills it in. A
 `3 1 1` record pins the certificate's public key, and the certificate
 currently comes from Traefik, whose ACME client generates a fresh key on every
-renewal — mailcow's own client reuses its key, Traefik's does not. Publishing
+renewal: mailcow's own client reuses its key, Traefik's does not. Publishing
 a TLSA against a rotating key means DANE-checking senders hard-fail delivery
 at the first renewal, which is a worse outcome than the missing subtest.
 Closing this means moving the SMTP certificate to a client that reuses its

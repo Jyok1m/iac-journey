@@ -22,7 +22,7 @@
     group: root
     mode: "0750"
 
-# The tree is never clean once the stack has run — postfix.sh rewrites main.cf
+# The tree is never clean once the stack has run: postfix.sh rewrites main.cf
 # on every container start. Gating on the tag keeps the checkout out of steady
 # state. Raw command because ansible.builtin.git has no read-only mode.
 - name: Read the checked-out mailcow version # noqa: command-instead-of-module

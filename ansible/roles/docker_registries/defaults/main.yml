@@ -1,6 +1,6 @@
 ---
 # Each registry is opt-in; a disabled one is never validated or logged into.
-# Credentials live in ansible/vaults/registries.yml — use a scoped token, never
+# Credentials live in ansible/vaults/registries.yml. Use a scoped token, never
 # an account password: this lands base64-encoded, unencrypted, in
 # /root/.docker/config.json.
 
@@ -19,7 +19,7 @@ docker_registries_gitlab_password: "{{ docker_registries_vault_gitlab_token }}"
 docker_registries_github_enabled: true
 docker_registries_github_url: ghcr.io
 docker_registries_github_username: "{{ docker_registries_vault_github_username }}"
-# Classic PAT — ghcr.io rejects fine-grained ones. read:packages, plus
+# Classic PAT (ghcr.io rejects fine-grained ones). read:packages, plus
 # write:packages to push.
 docker_registries_github_password: "{{ docker_registries_vault_github_token }}"
 

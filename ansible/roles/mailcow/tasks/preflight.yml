@@ -14,7 +14,7 @@
     fail_msg: >-
       ansible/vaults/mailcow.yml is missing or incomplete. It must define
       mailcow_vault_dbpass, mailcow_vault_dbroot, mailcow_vault_redispass,
-      mailcow_vault_sogo_key (exactly 16 characters — SOGo derives its URL
+      mailcow_vault_sogo_key (exactly 16 characters: SOGo derives its URL
       cipher from it and a different length breaks webmail links),
       mailcow_vault_api_key and mailcow_vault_mailboxes.
     quiet: true
@@ -38,7 +38,7 @@
       - item.address in (mailcow_vault_mailboxes | default({}))
     fail_msg: >-
       mailcow_vault_mailboxes has no entry for {{ item.address }}. The map is
-      keyed by the full address — an entry keyed on the local part alone is
+      keyed by the full address, and an entry keyed on the local part alone is
       ignored. Add it with `ansible-vault edit ansible/vaults/mailcow.yml`.
     quiet: true
   loop: "{{ mailcow_mailboxes }}"
@@ -72,7 +72,7 @@
 
 # The two lists have no shared source, so they are compared instead. A domain
 # in one and not the other looks like a working deployment: mailboxes with no
-# MX, or an MX for a domain mailcow rejects at RCPT TO — a backscatter source.
+# MX, or an MX for a domain mailcow rejects at RCPT TO (a backscatter source).
 - name: Read the terraform mail inputs
   ansible.builtin.set_fact:
     mailcow_tf_domains: >-
@@ -196,7 +196,7 @@
       mailcow asks for {{ mailcow_ipv4_network }}.0/24 and
       {{ mailcow_subnet_clash.stdout | trim }}. Docker refuses an overlapping
       pool, so the stack would fail halfway through `compose up`. Move
-      mailcow_ipv4_network to a free /24 — 172.16.0 sits one /16 below Docker's
+      mailcow_ipv4_network to a free /24: 172.16.0 sits one /16 below Docker's
       built-in default pool, so nothing will ever be auto-assigned on top of it.
     quiet: true
 

@@ -15,7 +15,7 @@ traefik_metrics_port: 8082
 traefik_public_network: traefik-public
 
 # Names that resolve straight to traefik from inside traefik-public, instead of
-# leaving the host for the Cloudflare edge and coming back — which also earns a
+# leaving the host for the Cloudflare edge and coming back, which also earns a
 # 403 code 1010 when its bot protection judges the TLS signature of a hosting
 # IP. SNI and Host stay the public name, so the certificate still matches.
 # Only containers attached to traefik-public see these.

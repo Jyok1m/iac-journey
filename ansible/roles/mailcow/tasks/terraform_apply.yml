@@ -1,7 +1,7 @@
 ---
 # One guarded terraform pass, included more than once per run. The guardrail is
 # the point: capture a plan, read it back, refuse anything that is not a pure
-# create or update, and apply that exact saved plan — never live config, never
+# create or update, and apply that exact saved plan: never live config, never
 # auto-approved unread. Runs on the control node, which holds the credentials.
 
 - name: "Initialise terraform ({{ mailcow_tf_purpose }})"
@@ -99,7 +99,7 @@
   ansible.builtin.file:
     path: "{{ mailcow_terraform_dir }}/{{ mailcow_tf_plan_file }}"
     state: absent
-  # Scratch this run created, not state — terraform writes it even for a
+  # Scratch this run created, not state: terraform writes it even for a
   # no-op plan, so removing it would otherwise report a change forever.
   changed_when: false
   delegate_to: localhost

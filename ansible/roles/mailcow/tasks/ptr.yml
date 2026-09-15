@@ -1,5 +1,5 @@
 ---
-# A reverse record belongs to whoever owns the IP block — OVH here — so this
+# A reverse record belongs to whoever owns the IP block (OVH here), so this
 # checks and refuses with the click path, rather than building a mail server
 # whose every message lands in spam for a reason nothing in the logs explains.
 
@@ -77,7 +77,7 @@
   ansible.builtin.debug:
     msg: >-
       No IPv6 reverse record for {{ mailcow_server_ipv6 }}. Harmless while
-      mailcow_enable_ipv6 is false, since nothing sends over IPv6 — but set it
+      mailcow_enable_ipv6 is false, since nothing sends over IPv6, but set it
       to {{ mailcow_hostname }} in the OVH manager before enabling IPv6.
   when:
     - not mailcow_enable_ipv6

@@ -27,7 +27,7 @@ services:
 
 # No volume override for postfix-mailcow: upstream already mounts the whole
 # ./data/conf/postfix directory. Bind-mounting the single file broke
-# postfix.sh — its `sed -i` renames a temp file into place, which fails with
+# postfix.sh: its `sed -i` renames a temp file into place, which fails with
 # EBUSY across a bind-mount point, so its dedupe step silently did nothing.
 
 networks:

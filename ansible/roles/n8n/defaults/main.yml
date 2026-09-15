@@ -12,6 +12,6 @@ n8n_container_name: n8n
 n8n_env_file: n8n.env
 n8n_timezone: Europe/Paris
 
-# Routing — the canonical host is the .com, the .fr permanently redirects to it.
+# The canonical host is the .com, the .fr permanently redirects to it.
 n8n_host: n8n.{{ portfolio_domain_com }}
 n8n_redirect_host: n8n.{{ portfolio_domain_fr }}

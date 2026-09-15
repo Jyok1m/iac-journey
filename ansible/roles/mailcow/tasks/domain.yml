@@ -1,6 +1,6 @@
 ---
-# mailcow's API is add-or-nothing — POST /add/domain on an existing domain
-# answers 200 with "domain_exists" — so every task reads first and writes only
+# mailcow's API is add-or-nothing (POST /add/domain on an existing domain
+# answers 200 with "domain_exists"), so every task reads first and writes only
 # what is missing. Mailboxes are keyed by full address throughout: no-reply
 # exists on two of these domains.
 
@@ -27,7 +27,7 @@
     body_format: json
     body:
       domain: "{{ item }}"
-      description: "{{ item }} — managed by the ansible mailcow role"
+      description: "{{ item }}, managed by the ansible mailcow role"
       aliases: 400
       mailboxes: 50
       defquota: 3072

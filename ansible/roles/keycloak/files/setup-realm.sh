@@ -125,7 +125,7 @@ authenticate
 log "authentifie par $AUTH_MODE"
 
 # api <METHODE> <CHEMIN> [CORPS] : renseigne HTTP_CODE et RESP_BODY. Sans
-# sortie standard — une substitution de commande perdrait les deux variables.
+# sortie standard : une substitution de commande perdrait les deux variables.
 HTTP_CODE=""
 RESP_BODY=""
 LAST_CALL=""

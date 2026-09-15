@@ -8,7 +8,7 @@ odyssai_deploy_group: jenkins
 odyssai_dev_enabled: true
 
 # The Jenkinsfile tags on the branch name: `main` is production, `dev` the
-# staging copy. No :latest to promote — the front bakes a different SITE_URL.
+# staging copy. No :latest to promote: the front bakes a different SITE_URL.
 odyssai_image_ns: jyok1m
 
 odyssai_api_image: "{{ odyssai_image_ns }}/odyssai-api:main"
@@ -45,7 +45,7 @@ odyssai_api_public: true
 odyssai_api_host: api.{{ odyssai_domain }}
 odyssai_api_router: Host(`{{ odyssai_api_host }}`)
 # api-dev and not api.dev: a DNS wildcard matches a single label, so
-# *.odyssai.app would not cover api.dev.odyssai.app — nor would Cloudflare's
+# *.odyssai.app would not cover api.dev.odyssai.app, nor would Cloudflare's
 # edge certificate.
 odyssai_api_dev_host: api-dev.{{ odyssai_domain }}
 odyssai_api_dev_router: Host(`{{ odyssai_api_dev_host }}`)
@@ -74,7 +74,7 @@ odyssai_pg_memory: 512M
 odyssai_pg_shared_buffers: 128MB
 odyssai_pg_effective_cache_size: 384MB
 odyssai_pg_max_connections: 50
-# Identical on both copies — each instance is a server of its own, so only the
+# Identical on both copies: each instance is a server of its own, so only the
 # passwords differ. Those live in vaults/odyssai.yml.
 odyssai_pg_db: odyssai
 odyssai_pg_user: odyssai
@@ -90,7 +90,7 @@ odyssai_keycloak_client_id: odyssai-api
 
 # One mailbox per environment: a message from the dev copy must never pass for
 # production, and rotating one password must not silence the other.
-# The public name, not the container — it is the one the mailcow certificate is
+# The public name, not the container: it is the one the mailcow certificate is
 # issued for, which STARTTLS verifies. 587 is submission (STARTTLS); 465 would
 # be implicit TLS and the two never combine.
 # Passwords live in vaults/mailcow.yml; the from address is the SMTP username.
@@ -104,6 +104,6 @@ odyssai_api_env_file: odyssai-api.env
 odyssai_api_dev_env_file: odyssai-api-dev.env
 
 # Baked into the image by the pipeline for the prerendered locales, and read at
-# runtime by src/lib/seo.ts for everything else — so it has to match the build.
+# runtime by src/lib/seo.ts for everything else, so it has to match the build.
 odyssai_site_url: https://{{ odyssai_web_host }}
 odyssai_dev_site_url: https://{{ odyssai_web_dev_host }}

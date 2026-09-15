@@ -13,7 +13,7 @@ mailcow_hostname: mail.{{ portfolio_domain_com }}
 mailcow_domain: "{{ portfolio_domain_com }}"
 mailcow_timezone: Europe/Paris
 
-# Mirrors mail_domains in terraform/mail.auto.tfvars — preflight refuses to run
+# Mirrors mail_domains in terraform/mail.auto.tfvars: preflight refuses to run
 # if the two disagree. A domain there but not here publishes an MX for a domain
 # mailcow rejects at RCPT TO, which is a backscatter source.
 # client_autoconfig costs a certificate for two extra names, so it stays off for
@@ -39,7 +39,7 @@ mailcow_https_port: 8443
 mailcow_traefik_network: "{{ traefik_public_network | default('traefik-public') }}"
 mailcow_compose_project: mailcowdockerized
 
-# Host() takes exactly one name — several names means several matchers joined
+# Host() takes exactly one name, so several names means several matchers joined
 # by ||, or the router silently fails to build.
 mailcow_router_rule: >-
   {{ ([mailcow_hostname] + mailcow_additional_server_names)
@@ -47,7 +47,7 @@ mailcow_router_rule: >-
 
 # Three-octet prefix, not a CIDR: upstream appends the host part itself.
 # 172.16.0 sits one /16 below Docker's default pool (172.17–172.31), all
-# fifteen of which are taken on this host — so no future stack can claim it.
+# fifteen of which are taken on this host, so no future stack can claim it.
 # The durable fix is default-address-pools in daemon.json, which needs a daemon
 # restart and would bounce nine other stacks. Same reason ENABLE_IPV6 stays off.
 mailcow_ipv4_network: 172.16.0
@@ -60,7 +60,7 @@ mailcow_fts_procs: 1
 
 mailcow_acme_email: "{{ traefik_acme_email | default('joachim.jasmin-dev@proton.me') }}"
 
-# Inbound IPv6 on the published ports works regardless — docker-proxy listens
+# Inbound IPv6 on the published ports works regardless: docker-proxy listens
 # on [::]. Revisit once the IPv6 PTR is set.
 mailcow_enable_ipv6: false
 
@@ -97,7 +97,7 @@ mailcow_mailboxes:
   - {address: no-reply@odyssai.app, name: No reply, quota: 1024}
 
 # postmaster and abuse are mandatory (RFC 2142) and must reach something that
-# is actually read — which for odyssai.app means crossing domains.
+# is actually read, which for odyssai.app means crossing domains.
 mailcow_aliases:
   - {address: "postmaster@{{ portfolio_domain_com }}", goto: "info@{{ portfolio_domain_com }}"}
   - {address: "abuse@{{ portfolio_domain_com }}", goto: "info@{{ portfolio_domain_com }}"}
@@ -115,7 +115,7 @@ mailcow_api_allow_from:
 mailcow_api_url: "http://{{ mailcow_http_bind }}:{{ mailcow_http_port }}"
 
 # "keycloak" and not "generic-oidc": the latter has no case in mailcow's
-# user_login() switch. Neither mode covers IMAP or SMTP — mail clients use app
+# user_login() switch. Neither mode covers IMAP or SMTP, so mail clients use app
 # passwords. Deviation SSO-1 in the decision log.
 mailcow_keycloak_enabled: true
 mailcow_keycloak_url: https://sso.{{ portfolio_domain_com }}

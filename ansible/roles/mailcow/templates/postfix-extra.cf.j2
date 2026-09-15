@@ -18,7 +18,7 @@ myhostname = {{ mailcow_hostname }}
 # own docs use: postfix-mailcow's entrypoint greps for that shape and, on a
 # match, drops the whole container's OpenSSL to SECLEVEL=0. Deviation TLS-1.
 #
-# Six AEAD suites, none of them DHE — which removes the ffdhe2048 problem by
+# Six AEAD suites, none of them DHE, which removes the ffdhe2048 problem by
 # construction rather than by reordering around it.
 tls_high_cipherlist = ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256
 tls_preempt_cipherlist = yes

@@ -17,7 +17,7 @@ variable "portfolio_server_ip" {
 
 variable "mail_hostname" {
   type        = string
-  description = "MAILCOW_HOSTNAME. Also the PTR, the SMTP HELO name and the CN of the certificate served on 25/465/587 — the three have to agree. One host serves every domain below, so this name is deliberately NOT per-domain."
+  description = "MAILCOW_HOSTNAME. Also the PTR, the SMTP HELO name and the CN of the certificate served on 25/465/587: the three have to agree. One host serves every domain below, so this name is deliberately NOT per-domain."
 }
 
 variable "mail_domain" {
@@ -51,7 +51,7 @@ variable "mail_domains" {
 
   validation {
     condition     = alltrue([for d in keys(var.mail_domains) : contains(keys(var.zone_ids), d)])
-    error_message = "Every key of mail_domains must also be a key of zone_ids — the records are written into that zone."
+    error_message = "Every key of mail_domains must also be a key of zone_ids: the records are written into that zone."
   }
 }
 
@@ -72,7 +72,7 @@ variable "mail_server_ipv6_prefix" {
 
 variable "mail_dnssec_enabled" {
   type        = bool
-  description = "Sign the mail zones at Cloudflare. Harmless on its own — a zone stays unvalidated, and so behaves exactly as before, until its DS is published at the registrar."
+  description = "Sign the mail zones at Cloudflare. Harmless on its own: a zone stays unvalidated, and so behaves exactly as before, until its DS is published at the registrar."
   default     = true
 }
 
@@ -91,7 +91,7 @@ variable "mail_dnssec_domains" {
 
 variable "mail_ttl" {
   type        = number
-  description = "TTL for every mail record. Low on purpose — DKIM and TLSA change during a rebuild."
+  description = "TTL for every mail record. Low on purpose: DKIM and TLSA change during a rebuild."
   default     = 300
 }
 
@@ -118,7 +118,7 @@ variable "mail_tlsrpt_rua" {
 
 variable "mail_dkim_selector" {
   type        = string
-  description = "DKIM selector mailcow signs with. One selector for every domain — mailcow keys are per-domain, the selector name is not."
+  description = "DKIM selector mailcow signs with. One selector for every domain: mailcow keys are per-domain, the selector name is not."
   default     = "dkim"
 }
 
@@ -130,7 +130,7 @@ variable "mail_dkim" {
     overruns the 255-byte limit on a single TXT character-string, and mailcow
     already emits the correctly split "chunk" "chunk" form. Rebuilding it here
     would reimplement that splitting, badly. A domain missing from this map, or
-    mapped to "", keeps its DKIM record out of the plan entirely — which is the
+    mapped to "", keeps its DKIM record out of the plan entirely, which is the
     state on the pass that runs before mailcow exists.
   EOT
   default     = {}
@@ -150,7 +150,7 @@ variable "mail_tlsa" {
     matching_type = number
     certificate   = string
   }))
-  description = "DANE records. Empty until the zone is signed — internet.nl ignores a TLSA RRset that is not DNSSEC-secure, and mail delivery breaks if one is published against an unsigned zone."
+  description = "DANE records. Empty until the zone is signed: internet.nl ignores a TLSA RRset that is not DNSSEC-secure, and mail delivery breaks if one is published against an unsigned zone."
   default     = []
 
   validation {

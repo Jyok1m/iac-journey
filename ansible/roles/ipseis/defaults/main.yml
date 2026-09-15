@@ -58,14 +58,14 @@ ipseis_dev_mail_to: joachim.jasmin-dev@proton.me
 #
 # Canonical on the .eu, the one zone terraform points at this host. ipseis.fr
 # is in the API's CORS list but is not delegated at all, and Traefik answers
-# ACME over HTTP-01 — a router for it would fail issuance in a loop.
+# ACME over HTTP-01, so a router for it would fail issuance in a loop.
 ipseis_web_host: ipseis.eu
 ipseis_web_router: Host(`{{ ipseis_web_host }}`)
 ipseis_web_alias_router: Host(`www.{{ ipseis_web_host }}`)
 ipseis_web_dev_host: dev.{{ ipseis_web_host }}
 ipseis_web_dev_router: Host(`{{ ipseis_web_dev_host }}`)
 
-# Served under the front's own domain but routed to the API — see the labels
+# Served under the front's own domain but routed to the API. See the labels
 # on ipseis-api for why it cannot live elsewhere.
 ipseis_ws_router: Host(`{{ ipseis_web_host }}`) && PathPrefix(`/socket.io`)
 ipseis_ws_dev_router: Host(`{{ ipseis_web_dev_host }}`) && PathPrefix(`/socket.io`)

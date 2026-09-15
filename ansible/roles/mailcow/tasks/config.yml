@@ -1,5 +1,5 @@
 ---
-# Rendered over the upstream checkout, which is never edited — so bumping
+# Rendered over the upstream checkout, which is never edited, so bumping
 # mailcow_version stays a clean checkout rather than a merge conflict.
 
 - name: Render mailcow.conf
@@ -24,7 +24,7 @@
   notify: Recreate mailcow
 
 # nginx will not start without a certificate, and with SKIP_LETS_ENCRYPT=y
-# nothing inside mailcow creates one — while Traefik only issues the real one
+# nothing inside mailcow creates one, while Traefik only issues the real one
 # once the router exists, which is a label on nginx. Without this placeholder
 # the two wait on each other forever. certsync overwrites it.
 - name: Create the certificate directory

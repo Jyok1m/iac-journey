@@ -64,7 +64,7 @@ services:
       - traefik.http.middlewares.prom-redirect.redirectregex.replacement=https://{{ monitoring_prometheus_host }}/$${1}
       - traefik.http.middlewares.prom-redirect.redirectregex.permanent=true
       # `htpasswd -nbB admin '<password>'`. The bcrypt hash is full of $,
-      # which Compose reads as interpolation — hence the doubling.
+      # which Compose reads as interpolation, hence the doubling.
       - traefik.http.middlewares.prom-auth.basicauth.users={{ monitoring_vault_prometheus_basic_auth | replace('$', '$$') }}
 {% endif %}
 {% if monitoring_is_hub %}

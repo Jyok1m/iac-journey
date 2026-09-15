@@ -251,7 +251,7 @@ services:
 
 # Compose stamps each network and volume with the key used to declare it and
 # refuses to touch one whose stamp moved. These keys are frozen on what the
-# running stack was built with — renaming one strands it.
+# running stack was built with: renaming one strands it.
 networks:
   ipseis-internal:
     name: {{ ipseis_app_name }}-internal

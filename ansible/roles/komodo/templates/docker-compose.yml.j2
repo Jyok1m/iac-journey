@@ -85,7 +85,7 @@ services:
       ## host daemon, which has to resolve them.
       - {{ komodo_periphery_root_dir }}:{{ komodo_periphery_root_dir }}
       ## Stacks rendered by Ansible, same path for the same reason.
-      ## Read-write because Komodo writes a project .env on deploy — but
+      ## Read-write because Komodo writes a project .env on deploy, but
       ## Ansible stays the source of truth, so the Komodo file editor is a
       ## debugging tool, not somewhere to make a change that should survive.
       - {{ komodo_stacks_dir }}:{{ komodo_stacks_dir }}

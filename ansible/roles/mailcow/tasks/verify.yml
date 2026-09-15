@@ -1,5 +1,5 @@
 ---
-# Reads live state — DNS from a public resolver, the certificate off the wire,
+# Reads live state: DNS from a public resolver, the certificate off the wire,
 # the banner from the port.
 
 # Handlers otherwise fire after this file, and every check below would measure
@@ -42,7 +42,7 @@
   register: mailcow_banner
   changed_when: false
 
-# HELO, PTR and certificate CN have to be the same string — every large
+# HELO, PTR and certificate CN have to be the same string, and every large
 # receiver checks at least two of the three against each other.
 - name: Assert the SMTP banner announces the mail hostname
   ansible.builtin.assert:
@@ -94,7 +94,7 @@
       Port(s) {{ mailcow_unreachable | join(', ') }} could not be opened from
       the control node, so the certificate there is unverified from outside.
       That is almost always the control node's own ISP blocking outbound 25
-      rather than anything on the server — confirm with
+      rather than anything on the server. Confirm with
       `openssl s_client -connect gmail-smtp-in.l.google.com:25`. External
       reachability of 25 is proven instead by mail-tester and by internet.nl's
       MX reachability subtest.
@@ -123,7 +123,7 @@
   changed_when: false
   loop: "{{ mailcow_http_checks }}"
   loop_control:
-    label: "{{ item.name }} — {{ item.host }}"
+    label: "{{ item.name }} ({{ item.host }})"
 
 - name: Assert every HTTP surface answers
   ansible.builtin.assert:
@@ -134,9 +134,9 @@
       returned {{ item.status | default('no response') }}.
       A 404 on the root of {{ mailcow_hostname }} is Traefik's own, meaning no
       router matched: check `docker logs traefik | grep mailcow` for a rule
-      parse error — Traefik's Host() matcher takes exactly one name, so
-      several names must be joined with || rather than passed as arguments —
-      and confirm nginx-mailcow is attached to {{ mailcow_traefik_network }}.
+      parse error. Traefik's Host() matcher takes exactly one name, so
+      several names must be joined with ||. Then confirm nginx-mailcow is
+      attached to {{ mailcow_traefik_network }}.
     quiet: true
   loop: "{{ mailcow_http_check.results }}"
   loop_control:
@@ -144,12 +144,12 @@
 
 # Reported, never asserted: this build answers 404 on the policy for every
 # domain, so the gate in tf_vars.yml never flips and the TXT stays unpublished.
-# Guarded on the fact existing — `--tags mailcow-verify` skips tf_vars.yml.
+# Guarded on the fact existing: `--tags mailcow-verify` skips tf_vars.yml.
 - name: Report the MTA-STS state
   ansible.builtin.debug:
     msg: >-
       MTA-STS is not announced for
-      {{ mailcow_mta_sts_off | join(', ') }} — mailcow answers 404 on
+      {{ mailcow_mta_sts_off | join(', ') }}: mailcow answers 404 on
       /.well-known/mta-sts.txt, so the policy is deliberately left
       unpublished rather than pointing senders at a missing document.
       Nothing to fix here; re-check after a mailcow version bump.
@@ -193,13 +193,13 @@
         terraform -chdir={{ mailcow_terraform_dir }} output mail_dnssec_status
 
       A zone reported "disabled" is not listed in mail_dnssec_domains in
-      mail.auto.tfvars — add it there first. A zone reported "pending" is
+      mail.auto.tfvars, so add it there first. A zone reported "pending" is
       already being signed by Cloudflare and only needs its DS pasted at its
       own registrar, which no credential in this repo can reach:
 
         terraform -chdir={{ mailcow_terraform_dir }} output mail_dnssec_ds
 
-      These three zones are registered in three different places — check each
+      These three zones are registered in three different places, so check each
       one's registrar rather than assuming, and paste the DS under its DNSSEC
       section.
   when: mailcow_zones_unsigned | length > 0

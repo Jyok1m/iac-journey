@@ -48,7 +48,7 @@
 
 # mailcow signs with the key it holds, DNS advertises the one terraform
 # published: a regenerated key without a DNS pass fails every signature while
-# looking perfectly configured. Both sides are normalised first — the key is
+# looking perfectly configured. Both sides are normalised first: the key is
 # split across quoted strings and dig re-quotes them on the way out.
 - name: Confirm each published key is the one mailcow signs with
   ansible.builtin.assert:

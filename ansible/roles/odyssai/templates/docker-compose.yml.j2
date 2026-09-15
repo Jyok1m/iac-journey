@@ -52,7 +52,7 @@ services:
       # Not .../data: since 18 PGDATA sits one level down, and this is the
       # path the image's own VOLUME declares.
       - db-data:/var/lib/postgresql
-    # Loopback only — 5432 is never opened in ufw, so reaching it from off the
+    # Loopback only: 5432 is never opened in ufw, so reaching it from off the
     # host means an SSH tunnel.
     ports:
       - "127.0.0.1:{{ odyssai_pg_port_host }}:{{ odyssai_pg_port }}/tcp"
@@ -123,7 +123,7 @@ services:
         max-size: "10m"
         max-file: "3"
     # traefik-public carries the inbound traffic and is also the only route
-    # out — which Keycloak's token endpoint already needs.
+    # out, which Keycloak's token endpoint already needs.
     networks:
       - odyssai-internal
       - traefik-public
@@ -159,7 +159,7 @@ services:
         reservations:
           memory: 128M
     # Ordering only, no health gate: an unhealthy API must not hold the public
-    # site down — that is a per-request failure, not a boot one.
+    # site down: that is a per-request failure, not a boot one.
     depends_on:
       - api
     healthcheck:
@@ -388,7 +388,7 @@ volumes:
 {% endif %}
 
 # Compose stamps each network with the key used to declare it and refuses to
-# touch one whose stamp moved — renaming a key strands the running network.
+# touch one whose stamp moved: renaming a key strands the running network.
 networks:
   odyssai-internal:
     name: {{ odyssai_app_name }}-internal

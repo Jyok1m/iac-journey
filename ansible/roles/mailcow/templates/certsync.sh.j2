@@ -2,7 +2,7 @@
 # Ansible managed.
 #
 # Traefik cannot terminate SMTP or IMAP, and Postfix and Dovecot read their
-# certificate from data/assets/ssl/ on disk — so it is copied there and the
+# certificate from data/assets/ssl/ on disk, so it is copied there and the
 # containers restarted. Driven by a systemd .path unit watching acme.json, so
 # a renewal between Ansible runs still reaches them.
 #
