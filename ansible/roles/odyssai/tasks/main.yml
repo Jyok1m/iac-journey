@@ -81,6 +81,25 @@
   community.docker.docker_compose_v2_pull:
     project_src: "{{ odyssai_app_dir }}"
 
+# Before the services: the API and the worker open Postgres at boot, and
+# starting them on a schema they do not know is the failure this prevents. The
+# Jenkins deploy runs the same container at the same point, between its pull
+# and its up.
+- name: Apply database migrations
+  community.docker.docker_compose_v2_run:
+    project_src: "{{ odyssai_app_dir }}"
+    service: "{{ item }}"
+    profiles:
+      - tools
+    cleanup: true
+  loop: >-
+    {{ ['migrate'] + (['migrate-dev'] if odyssai_dev_enabled | bool else []) }}
+  register: odyssai_migrate_run
+  # A no-op on an up-to-date database: reporting changed every run would bury
+  # the one that matters.
+  changed_when: >-
+    'Applying migration' in (odyssai_migrate_run.stdout | default(''))
+
 # auto recreates a container whose image ID moved, so a fresh push on :dev
 # bounces the dev copy and leaves production alone.
 - name: Deploy services

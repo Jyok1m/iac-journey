@@ -83,6 +83,30 @@ services:
       - odyssai-internal
       - odyssai-db-host
 
+  # Applies the pending migrations and exits. The API image ships without the
+  # Prisma CLI on purpose, so nothing else can, and the `tools` profile keeps
+  # this one out of every `up`.
+  migrate:
+    image: {{ odyssai_migrate_image }}
+    # No container_name: `compose run` names its own, and a fixed one would
+    # collide with a run still on the host.
+    profiles:
+      - tools
+    restart: "no"
+    env_file: {{ odyssai_api_env_file }}
+    # Starts the database and waits for it, so this holds on a host where
+    # nothing runs yet.
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: {{ odyssai_migrate_memory }}
+    networks:
+      - odyssai-internal
+
   api:
     image: {{ odyssai_api_image }}
     container_name: {{ odyssai_api_container_name }}
@@ -317,6 +341,23 @@ services:
         max-size: "10m"
         max-file: "3"
     # No companion bridge: odyssai-internal-dev is already a plain one.
+    networks:
+      - odyssai-internal-dev
+
+  migrate-dev:
+    image: {{ odyssai_migrate_dev_image }}
+    profiles:
+      - tools
+    restart: "no"
+    env_file: {{ odyssai_api_dev_env_file }}
+    depends_on:
+      db-dev:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: {{ odyssai_migrate_memory }}
     networks:
       - odyssai-internal-dev
 

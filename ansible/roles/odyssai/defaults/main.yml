@@ -33,6 +33,13 @@ odyssai_worker_heap_mb: 384
 odyssai_worker_dev_image: "{{ odyssai_image_ns }}/odyssai-worker:dev"
 odyssai_worker_dev_container_name: odyssai-worker-dev
 
+# The only thing that applies the schema: the API image ships without the
+# Prisma CLI. Same tag as the copy it migrates, so a build and its schema
+# travel together.
+odyssai_migrate_image: "{{ odyssai_image_ns }}/odyssai-migrate:main"
+odyssai_migrate_dev_image: "{{ odyssai_image_ns }}/odyssai-migrate:dev"
+odyssai_migrate_memory: 512M
+
 odyssai_web_image: "{{ odyssai_image_ns }}/odyssai-web:main"
 odyssai_web_container_name: odyssai-web
 odyssai_web_port: 3000
