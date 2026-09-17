@@ -27,6 +27,18 @@
     modification_time: preserve
     access_time: preserve
 
+- name: Deploy htpasswd files
+  ansible.builtin.copy:
+    content: "{{ item.value }}\n"
+    dest: "{{ traefik_app_dir }}/{{ item.key }}.htpasswd"
+    owner: root
+    group: root
+    mode: "0640"
+  loop: "{{ traefik_htpasswd_files | dict2items | selectattr('value') | list }}"
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
+
 - name: Deploy compose file
   ansible.builtin.template:
     src: docker-compose.yml.j2

@@ -47,6 +47,9 @@ services:
       # Traefik only watches container events, it never acts on the daemon.
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - "{{ traefik_data_dir }}/acme.json:/acme.json"
+{% for name, value in traefik_htpasswd_files.items() if value %}
+      - "{{ traefik_app_dir }}/{{ name }}.htpasswd:/etc/traefik/{{ name }}.htpasswd:ro"
+{% endfor %}
     ports:
       - 80:80/tcp
       - 443:443/tcp

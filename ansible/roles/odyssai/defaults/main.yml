@@ -39,6 +39,13 @@ odyssai_web_router: Host(`{{ odyssai_web_host }}`)
 odyssai_web_alias_router: Host(`www.{{ odyssai_web_host }}`)
 odyssai_web_dev_host: dev.{{ odyssai_domain }}
 odyssai_web_dev_router: Host(`{{ odyssai_web_dev_host }}`)
+# The staging copy answers 401 to everyone, crawlers included: it serves the
+# same pages as production with its own canonical URLs and sitemap, which would
+# otherwise compete with it. The file is mounted by the traefik role and its
+# key lives in vaults/traefik.yml.
+odyssai_dev_basic_auth: true
+odyssai_dev_basic_auth_file: /etc/traefik/odyssai-dev.htpasswd
+odyssai_dev_basic_auth_realm: OdyssAI staging
 
 # False keeps the API reachable from the front over the internal network alone.
 odyssai_api_public: true

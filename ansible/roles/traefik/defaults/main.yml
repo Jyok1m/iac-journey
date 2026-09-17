@@ -21,3 +21,11 @@ traefik_public_network: traefik-public
 # Only containers attached to traefik-public see these.
 traefik_internal_aliases:
   - sso.{{ portfolio_domain_com }}
+
+# htpasswd files other stacks point at with basicauth.usersfile. Traefik is
+# what reads them, so they are mounted here rather than in the stack that uses
+# them, and the hash never reaches a label where docker inspect would show it.
+# An entry with an empty value is skipped, so the role deploys before its vault
+# key exists.
+traefik_htpasswd_files:
+  odyssai-dev: "{{ traefik_vault_odyssai_dev_basic_auth | default('') }}"

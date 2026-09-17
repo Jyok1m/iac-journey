@@ -373,6 +373,15 @@ services:
       - traefik.http.routers.{{ odyssai_web_dev_container_name }}.entrypoints=websecure
       - traefik.http.routers.{{ odyssai_web_dev_container_name }}.tls.certresolver=letsencrypt
       - traefik.http.services.{{ odyssai_web_dev_container_name }}.loadbalancer.server.port={{ odyssai_web_port }}
+{% if odyssai_dev_basic_auth | bool %}
+      # usersfile and not users: the hash stays in a file mounted into traefik,
+      # out of the labels that docker inspect exposes to the deploy group.
+      # api-dev is deliberately left open, a 401 on a cross-origin fetch carries
+      # no CORS headers and the front would break rather than prompt.
+      - traefik.http.middlewares.{{ odyssai_web_dev_container_name }}-auth.basicauth.usersfile={{ odyssai_dev_basic_auth_file }}
+      - traefik.http.middlewares.{{ odyssai_web_dev_container_name }}-auth.basicauth.realm={{ odyssai_dev_basic_auth_realm }}
+      - traefik.http.routers.{{ odyssai_web_dev_container_name }}.middlewares={{ odyssai_web_dev_container_name }}-auth
+{% endif %}
 {% endif %}
 
 volumes:

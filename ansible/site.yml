@@ -14,6 +14,9 @@
 # Traefik owns the traefik-public network every stack below joins.
 - name: Install the edge proxy
   hosts: portfolio
+  vars_files:
+    # htpasswd lines for the stacks traefik puts behind basic auth.
+    - vaults/traefik.yml
   roles:
     - {role: traefik, tags: [traefik]}
   tags: [edge]
