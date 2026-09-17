@@ -185,7 +185,7 @@ REALM_CONFIG="$(jq -n \
   registrationEmailAsUsername: true,
   loginWithEmailAllowed: true,
   duplicateEmailsAllowed: false,
-  editUsernameAllowed: false,
+  editUsernameAllowed: true,
   resetPasswordAllowed: true,
   rememberMe: true,
 
@@ -222,9 +222,15 @@ REALM_CONFIG="$(jq -n \
   refreshTokenMaxReuse: 0,
 
   defaultSignatureAlgorithm: "RS256",
+  # frame-ancestors a self et non none : Keycloak charge ses propres pages dans
+  # des iframes de meme origine, la sonde de cookies tiers 3p-cookies/step1.html
+  # et le verificateur de session login-status-iframe.html. En none le
+  # navigateur refuse leur integration, elles ne repondent jamais, et la console
+  # de compte echoue sur Timeout when waiting for 3rd party check iframe
+  # message. Un autre site reste interdit, ce qui est le but du garde-fou.
   browserSecurityHeaders: {
-    contentSecurityPolicy: "frame-src '\''self'\''; frame-ancestors '\''none'\''; object-src '\''none'\''",
-    xFrameOptions: "DENY",
+    contentSecurityPolicy: "frame-src '\''self'\''; frame-ancestors '\''self'\''; object-src '\''none'\''",
+    xFrameOptions: "SAMEORIGIN",
     strictTransportSecurity: "max-age=31536000; includeSubDomains"
   }
 }')"
@@ -331,6 +337,49 @@ if ! jq -e 'any(.[]; .name == "player")' <<<"$RESP_BODY" >/dev/null; then
   log "role ajoute aux roles par defaut"
 else
   log "role deja dans les roles par defaut"
+fi
+
+# -------------------------------------------------- suppression de son compte
+
+# Le joueur supprime lui-meme son identite depuis la console de compte. L'api
+# n'a deliberement aucun droit sur le realm : lui donner manage-users pour ce
+# seul usage lui donnerait le droit de supprimer n'importe qui. Deux pieces
+# sont necessaires, et ni l'une ni l'autre n'est active par defaut.
+
+step "Suppression de compte par le joueur"
+
+api GET "/admin/realms/$REALM/authentication/required-actions/delete_account"
+if [[ "$HTTP_CODE" == "200" ]] && jq -e '.enabled' <<<"$RESP_BODY" >/dev/null; then
+  log "action requise deja activee"
+else
+  api PUT "/admin/realms/$REALM/authentication/required-actions/delete_account" \
+    "$(jq -n '{alias:"delete_account",name:"Delete Account",providerId:"delete_account",
+               enabled:true,defaultAction:false,priority:60,config:{}}')"
+  expect "204"
+  log "action requise activee"
+fi
+
+# Le bouton n'apparait dans la console que si le joueur porte le role client
+# delete-account du client account. On l'ajoute aux roles par defaut du realm,
+# a cote de player, pour que tout compte existant l'obtienne aussi.
+api GET "/admin/realms/$REALM/clients?clientId=account"
+expect "200"
+ACCOUNT_CLIENT_ID="$(jq -re '.[0].id' <<<"$RESP_BODY")"
+
+api GET "/admin/realms/$REALM/clients/$ACCOUNT_CLIENT_ID/roles/delete-account"
+expect "200"
+DELETE_ACCOUNT_ROLE="$RESP_BODY"
+
+api GET "/admin/realms/$REALM/roles-by-id/$DEFAULT_ROLE_ID/composites"
+expect "200"
+
+if ! jq -e 'any(.[]; .name == "delete-account")' <<<"$RESP_BODY" >/dev/null; then
+  api POST "/admin/realms/$REALM/roles-by-id/$DEFAULT_ROLE_ID/composites" \
+    "$(jq -n --argjson r "$DELETE_ACCOUNT_ROLE" '[$r]')"
+  expect "204"
+  log "role delete-account ajoute aux roles par defaut"
+else
+  log "role delete-account deja dans les roles par defaut"
 fi
 
 # ---------------------------------------------------------------------- client
