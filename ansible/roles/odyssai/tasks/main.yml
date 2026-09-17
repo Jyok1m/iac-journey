@@ -26,6 +26,15 @@
     redis_password: "{{ item.redis_password }}"
     pg_host: "{{ item.pg_host }}"
     pg_password: "{{ item.pg_password }}"
+    langsmith_project: "{{ item.langsmith_project }}"
+    langsmith_tracing: "{{ item.langsmith_tracing }}"
+    langsmith_api_key: "{{ item.langsmith_api_key }}"
+    guide_enabled: "{{ item.guide_enabled }}"
+    guide_daily_budget_usd: "{{ item.guide_daily_budget_usd }}"
+    guide_trace_sample_rate: "{{ item.guide_trace_sample_rate }}"
+    openrouter_api_key: "{{ item.openrouter_api_key }}"
+    guide_ip_hash_secret: "{{ item.guide_ip_hash_secret }}"
+    turnstile_secret_key: "{{ item.turnstile_secret_key }}"
   no_log: true
 
 - name: Deploy database env files

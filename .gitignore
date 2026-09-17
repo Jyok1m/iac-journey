@@ -31,3 +31,6 @@ crash.log
 *_override.tf
 override.tf
 override.tf.json
+
+# IDE
+.idea

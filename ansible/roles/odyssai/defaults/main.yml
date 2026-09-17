@@ -107,3 +107,33 @@ odyssai_api_dev_env_file: odyssai-api-dev.env
 # runtime by src/lib/seo.ts for everything else, so it has to match the build.
 odyssai_site_url: https://{{ odyssai_web_host }}
 odyssai_dev_site_url: https://{{ odyssai_web_dev_host }}
+
+# Site guide. What differs per copy (LangSmith project, budget, secrets) lives
+# in vars/main.yml.
+odyssai_guide_provider: openrouter
+odyssai_guide_model: openai/gpt-5.6-luna
+# data_collection deny drops the providers that retain exchanges; reasoning
+# none keeps a 120 word answer from being billed thinking tokens.
+odyssai_guide_extra_body: '{"models":["qwen/qwen3.8-flash"],"reasoning":{"effort":"none"},"provider":{"data_collection":"deny"}}'
+odyssai_guide_temperature: "0.3"
+odyssai_guide_max_output_tokens: 350
+# Priced on the fallback, the dearer of the chain: a budget that is wrong has
+# to be wrong on the high side.
+odyssai_guide_price_input: "0.20"
+odyssai_guide_price_output: "1.20"
+
+odyssai_guide_rate_per_hour: 10
+odyssai_guide_rate_per_day: 30
+odyssai_guide_max_concurrent: 5
+odyssai_guide_pass_questions: 10
+odyssai_guide_pass_ttl_seconds: 3600
+odyssai_guide_log_retention_days: 30
+
+# Cloudflare then Traefik each append to X-Forwarded-For. Without both hops,
+# req.ip is Traefik's and the per-IP window becomes one global window.
+odyssai_trust_proxy: 2
+
+odyssai_langsmith_endpoint: https://eu.api.smith.langchain.com
+# Traces keep metadata, usage and timings but not the text: questions and
+# answers already sit in guide_questions for the retention above.
+odyssai_guide_trace_hide_io: "true"

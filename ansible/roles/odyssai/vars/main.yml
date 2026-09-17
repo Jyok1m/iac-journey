@@ -12,6 +12,15 @@ odyssai_api_env_prod:
   redis_password: "{{ odyssai_vault_redis_password }}"
   pg_host: "{{ odyssai_pg_container_name }}"
   pg_password: "{{ odyssai_vault_pg_password }}"
+  langsmith_project: Odyssai-Prod
+  langsmith_tracing: "true"
+  langsmith_api_key: "{{ odyssai_vault_langsmith_api_key }}"
+  guide_enabled: "true"
+  guide_daily_budget_usd: "1"
+  guide_trace_sample_rate: "1"
+  openrouter_api_key: "{{ odyssai_vault_openrouter_api_key }}"
+  guide_ip_hash_secret: "{{ odyssai_vault_guide_ip_hash_secret }}"
+  turnstile_secret_key: "{{ odyssai_vault_turnstile_secret_key }}"
 
 odyssai_api_env_dev:
   file: "{{ odyssai_api_dev_env_file }}"
@@ -23,6 +32,18 @@ odyssai_api_env_dev:
   redis_password: "{{ odyssai_vault_redis_dev_password }}"
   pg_host: "{{ odyssai_pg_dev_container_name }}"
   pg_password: "{{ odyssai_vault_pg_dev_password }}"
+  # One LangSmith key, one project per copy: the project is what separates the
+  # traces. A Turnstile widget only answers for the hostnames it declares, so
+  # the dev copy needs its own, and its own IP hashing secret.
+  langsmith_project: Odyssai-Dev
+  langsmith_tracing: "true"
+  langsmith_api_key: "{{ odyssai_vault_langsmith_dev_api_key }}"
+  guide_enabled: "true"
+  guide_daily_budget_usd: "0.20"
+  guide_trace_sample_rate: "1"
+  openrouter_api_key: "{{ odyssai_vault_openrouter_dev_api_key }}"
+  guide_ip_hash_secret: "{{ odyssai_vault_guide_dev_ip_hash_secret }}"
+  turnstile_secret_key: "{{ odyssai_vault_turnstile_dev_secret_key }}"
 
 odyssai_api_env_targets: >-
   {{ [odyssai_api_env_prod]
