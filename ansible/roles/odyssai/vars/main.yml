@@ -21,6 +21,12 @@ odyssai_api_env_prod:
   openrouter_api_key: "{{ odyssai_vault_openrouter_api_key }}"
   guide_ip_hash_secret: "{{ odyssai_vault_guide_ip_hash_secret }}"
   turnstile_secret_key: "{{ odyssai_vault_turnstile_secret_key }}"
+  # The only copy allowed a live key, and the only one refused a test key.
+  odyssai_env: production
+  stripe_private_key: "{{ odyssai_vault_stripe_private_key | default('', true) }}"
+  stripe_webhook_secret: "{{ odyssai_vault_stripe_webhook_secret | default('', true) }}"
+  stripe_price_apprenti: "{{ odyssai_stripe_price_apprenti }}"
+  stripe_price_arpenteur: "{{ odyssai_stripe_price_arpenteur }}"
 
 odyssai_api_env_dev:
   file: "{{ odyssai_api_dev_env_file }}"
@@ -44,6 +50,13 @@ odyssai_api_env_dev:
   openrouter_api_key: "{{ odyssai_vault_openrouter_dev_api_key }}"
   guide_ip_hash_secret: "{{ odyssai_vault_guide_dev_ip_hash_secret }}"
   turnstile_secret_key: "{{ odyssai_vault_turnstile_dev_secret_key }}"
+  # Staging, not production: this copy runs Stripe in test mode, where a card
+  # number that always succeeds is the whole point.
+  odyssai_env: staging
+  stripe_private_key: "{{ odyssai_vault_stripe_dev_private_key | default('', true) }}"
+  stripe_webhook_secret: "{{ odyssai_vault_stripe_dev_webhook_secret | default('', true) }}"
+  stripe_price_apprenti: "{{ odyssai_stripe_dev_price_apprenti }}"
+  stripe_price_arpenteur: "{{ odyssai_stripe_dev_price_arpenteur }}"
 
 odyssai_api_env_targets: >-
   {{ [odyssai_api_env_prod]

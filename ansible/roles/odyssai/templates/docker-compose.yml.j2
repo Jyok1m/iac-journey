@@ -139,6 +139,50 @@ services:
       - traefik.enable=false
 {% endif %}
 
+  worker:
+    image: {{ odyssai_worker_image }}
+    container_name: {{ odyssai_worker_container_name }}
+    restart: unless-stopped
+    # The API's own file: the worker reads the same Postgres, Redis, LangSmith
+    # and provider values, and a second copy would drift from it.
+    env_file: {{ odyssai_api_env_file }}
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size={{ odyssai_worker_heap_mb }}
+    # Same health gate as the API: it opens both connections at boot, so
+    # starting it early is just a crash loop.
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ odyssai_worker_memory }}
+        reservations:
+          memory: 128M
+    # No healthcheck: it listens on nothing, so there is nothing to probe. A
+    # crash is caught by restart, and a job left in flight is picked up again.
+    #
+    # SIGTERM lets the world in progress finish. Past this grace the job's Redis
+    # lock expires and the next run resumes at the node after the last
+    # checkpoint, so a hard kill costs one node, not one world.
+    stop_grace_period: 2m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # traefik-public carries nothing inbound here: it is the only way out.
+    # odyssai-internal is internal, and the worker calls the model provider.
+    networks:
+      - odyssai-internal
+      - traefik-public
+    labels:
+      - traefik.enable=false
+
   web:
     image: {{ odyssai_web_image }}
     container_name: {{ odyssai_web_container_name }}
@@ -328,6 +372,40 @@ services:
 {% else %}
       - traefik.enable=false
 {% endif %}
+
+  worker-dev:
+    image: {{ odyssai_worker_dev_image }}
+    container_name: {{ odyssai_worker_dev_container_name }}
+    restart: unless-stopped
+    env_file: {{ odyssai_api_dev_env_file }}
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size={{ odyssai_worker_heap_mb }}
+    depends_on:
+      redis-dev:
+        condition: service_healthy
+      db-dev:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ odyssai_worker_memory }}
+        reservations:
+          memory: 128M
+    stop_grace_period: 2m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # No traefik-public, unlike its production twin: odyssai-internal-dev is a
+    # plain bridge, so it already routes out. Joining the shared network for
+    # nothing would only widen what this container sits next to.
+    networks:
+      - odyssai-internal-dev
+    labels:
+      - traefik.enable=false
 
   web-dev:
     image: {{ odyssai_web_dev_image }}

@@ -23,6 +23,16 @@ odyssai_api_heap_mb: 384
 odyssai_api_dev_image: "{{ odyssai_image_ns }}/odyssai-api:dev"
 odyssai_api_dev_container_name: odyssai-api-dev
 
+# Generation worker. No port, no router: it consumes the queue and serves
+# nothing. It shares the API's env file rather than carrying a second copy of
+# the same Postgres, Redis, LangSmith and provider values.
+odyssai_worker_image: "{{ odyssai_image_ns }}/odyssai-worker:main"
+odyssai_worker_container_name: odyssai-worker
+odyssai_worker_memory: 512M
+odyssai_worker_heap_mb: 384
+odyssai_worker_dev_image: "{{ odyssai_image_ns }}/odyssai-worker:dev"
+odyssai_worker_dev_container_name: odyssai-worker-dev
+
 odyssai_web_image: "{{ odyssai_image_ns }}/odyssai-web:main"
 odyssai_web_container_name: odyssai-web
 odyssai_web_port: 3000
@@ -71,7 +81,14 @@ odyssai_redis_dev_conf_file: redis-dev.conf
 
 # Same split for the database. Published on the host loopback so psql,
 # migrations and dumps can run from a workstation over an SSH tunnel.
-odyssai_pg_image: postgres:18.4-trixie@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+# pgvector/pgvector rather than the official postgres image: the game master's
+# long memory recalls old turns by similarity, which needs the `vector`
+# extension, and the official image does not ship it. Same Postgres 18
+# underneath, so the data directory is unchanged and the swap is a restart.
+#
+# Until this is deployed, the API detects the missing extension at boot and
+# falls back to the last few turns. The game is playable, the memory is short.
+odyssai_pg_image: pgvector/pgvector:pg18
 odyssai_pg_container_name: odyssai-db
 odyssai_pg_dev_container_name: odyssai-db-dev
 odyssai_pg_port: 5432
@@ -140,7 +157,47 @@ odyssai_guide_log_retention_days: 30
 # req.ip is Traefik's and the per-IP window becomes one global window.
 odyssai_trust_proxy: 2
 
+# World narrator and generation. The model was picked by evaluation, not by
+# reputation: `pnpm --filter @odyssai/api eval:narration` scores candidates on
+# the abstraction pass, and this is the winner. Re-run it before changing this
+# line. LLM_NARRATOR_CANDIDATES is deliberately absent: the comparison is a
+# workstation task, and a server has nothing to compare.
+odyssai_narrator_provider: openrouter
+odyssai_narrator_model: qwen/qwen3.5-35b-a3b
+# Same reasoning as the guide: data_collection deny drops providers that retain
+# exchanges, reasoning none keeps structured JSON from being billed thinking.
+odyssai_narrator_extra_body: '{"reasoning":{"effort":"none"},"provider":{"data_collection":"deny"}}'
+# Higher than the guide's 0.3: this writes worlds, not answers about a website.
+odyssai_narrator_temperature: "0.6"
+odyssai_narrator_max_output_tokens: 900
+# Order of magnitude, derived from what the evaluation reported for this model,
+# not from a price list. Nothing reads them yet: the worker enforces no budget.
+# Check them against OpenRouter the day a budget is wired to generation, since
+# a budget priced wrong is worse than none.
+odyssai_narrator_price_input: "0.10"
+odyssai_narrator_price_output: "0.40"
+
+# One world at a time. A generation is seven model calls over several minutes,
+# and running two abreast on this host lengthens both for nothing.
+odyssai_worker_concurrency: 1
+
 odyssai_langsmith_endpoint: https://eu.api.smith.langchain.com
 # Traces keep metadata, usage and timings but not the text: questions and
 # answers already sit in guide_questions for the retention above.
 odyssai_guide_trace_hide_io: "true"
+
+# Stripe price ids. Empty means the plan is simply not on sale: the account
+# screen hides it rather than offering a button that would answer 503, so the
+# stack deploys before any product exists.
+#
+# Create them once per mode, test then live, and paste the price ids here:
+#   stripe products create --name="OdyssAI Apprenti"
+#   stripe prices create -d "product=prod_xxx" -d "currency=eur" \
+#     -d "unit_amount=500" -d "recurring[interval]=month"
+#
+# The keys themselves are in the vault, as odyssai_vault_stripe_private_key,
+# odyssai_vault_stripe_webhook_secret and their _dev_ counterparts.
+odyssai_stripe_price_apprenti: ""
+odyssai_stripe_price_arpenteur: ""
+odyssai_stripe_dev_price_apprenti: ""
+odyssai_stripe_dev_price_arpenteur: ""

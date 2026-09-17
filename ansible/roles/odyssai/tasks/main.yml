@@ -35,6 +35,11 @@
     openrouter_api_key: "{{ item.openrouter_api_key }}"
     guide_ip_hash_secret: "{{ item.guide_ip_hash_secret }}"
     turnstile_secret_key: "{{ item.turnstile_secret_key }}"
+    odyssai_env: "{{ item.odyssai_env }}"
+    stripe_private_key: "{{ item.stripe_private_key }}"
+    stripe_webhook_secret: "{{ item.stripe_webhook_secret }}"
+    stripe_price_apprenti: "{{ item.stripe_price_apprenti }}"
+    stripe_price_arpenteur: "{{ item.stripe_price_arpenteur }}"
   no_log: true
 
 - name: Deploy database env files

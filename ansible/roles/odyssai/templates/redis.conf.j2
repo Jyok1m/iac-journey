@@ -8,10 +8,14 @@ requirepass {{ redis_password }}
 appendonly yes
 appendfsync everysec
 
-# Every key carries a TTL, so hitting the ceiling drops the oldest sessions
-# instead of failing new logins.
+# noeviction, not volatile-ttl. Nothing here is a recomputable cache: sessions
+# are the only record of who is signed in, the guide budget counter guards real
+# spend, and the generation queue carries a player's world. Evicting by TTL
+# would drop exactly those, silently, while BullMQ keys, which carry no TTL,
+# survived. A loud write failure at the ceiling is the lesser harm, and it is
+# alertable. BullMQ refuses to work correctly under any other policy.
 maxmemory {{ odyssai_redis_maxmemory }}
-maxmemory-policy volatile-ttl
+maxmemory-policy noeviction
 
 # Second lock behind the internal network, in case of a misrouted publish.
 protected-mode yes
