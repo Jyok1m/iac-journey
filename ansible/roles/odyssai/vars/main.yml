@@ -25,8 +25,6 @@ odyssai_api_env_prod:
   odyssai_env: production
   stripe_private_key: "{{ odyssai_vault_stripe_private_key | default('', true) }}"
   stripe_webhook_secret: "{{ odyssai_vault_stripe_webhook_secret | default('', true) }}"
-  stripe_price_apprenti: "{{ odyssai_stripe_price_apprenti }}"
-  stripe_price_arpenteur: "{{ odyssai_stripe_price_arpenteur }}"
 
 odyssai_api_env_dev:
   file: "{{ odyssai_api_dev_env_file }}"
@@ -55,8 +53,6 @@ odyssai_api_env_dev:
   odyssai_env: staging
   stripe_private_key: "{{ odyssai_vault_stripe_dev_private_key | default('', true) }}"
   stripe_webhook_secret: "{{ odyssai_vault_stripe_dev_webhook_secret | default('', true) }}"
-  stripe_price_apprenti: "{{ odyssai_stripe_dev_price_apprenti }}"
-  stripe_price_arpenteur: "{{ odyssai_stripe_dev_price_arpenteur }}"
 
 odyssai_api_env_targets: >-
   {{ [odyssai_api_env_prod]

@@ -193,18 +193,9 @@ odyssai_langsmith_endpoint: https://eu.api.smith.langchain.com
 # answers already sit in guide_questions for the retention above.
 odyssai_guide_trace_hide_io: "true"
 
-# Stripe price ids. Empty means the plan is simply not on sale: the account
-# screen hides it rather than offering a button that would answer 503, so the
-# stack deploys before any product exists.
-#
-# Create them once per mode, test then live, and paste the price ids here:
-#   stripe products create --name="OdyssAI Apprenti"
-#   stripe prices create -d "product=prod_xxx" -d "currency=eur" \
-#     -d "unit_amount=500" -d "recurring[interval]=month"
-#
-# The keys themselves are in the vault, as odyssai_vault_stripe_private_key,
+# Stripe keys live in the vault: odyssai_vault_stripe_private_key,
 # odyssai_vault_stripe_webhook_secret and their _dev_ counterparts.
-odyssai_stripe_price_apprenti: ""
-odyssai_stripe_price_arpenteur: ""
-odyssai_stripe_dev_price_apprenti: ""
-odyssai_stripe_dev_price_arpenteur: ""
+#
+# Price ids are deliberately absent. Plans are rows in the `plans` table, and
+# the admin dashboard at /admin creates the Stripe product and price itself
+# when you add a paid tier. Nothing to set here, nothing to redeploy.
