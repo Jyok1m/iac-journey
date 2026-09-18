@@ -38,6 +38,8 @@
     odyssai_env: "{{ item.odyssai_env }}"
     stripe_private_key: "{{ item.stripe_private_key }}"
     stripe_webhook_secret: "{{ item.stripe_webhook_secret }}"
+    smtp_user: "{{ item.smtp_user }}"
+    smtp_password: "{{ item.smtp_password }}"
   no_log: true
 
 - name: Deploy database env files

@@ -130,6 +130,9 @@ odyssai_smtp_port: 587
 odyssai_smtp_from: no-reply@{{ odyssai_domain }}
 odyssai_smtp_dev_from: no-reply-dev@{{ odyssai_domain }}
 odyssai_smtp_from_display_name: "Joachim @ OdyssAI"
+# Where the contact form's messages land. One inbox for both copies: a message
+# sent from the dev site is still a message to read.
+odyssai_contact_to: joachim.jasmin-dev@proton.me
 
 odyssai_api_env_file: odyssai-api.env
 odyssai_api_dev_env_file: odyssai-api-dev.env

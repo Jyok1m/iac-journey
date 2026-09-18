@@ -25,6 +25,11 @@ odyssai_api_env_prod:
   odyssai_env: production
   stripe_private_key: "{{ odyssai_vault_stripe_private_key | default('', true) }}"
   stripe_webhook_secret: "{{ odyssai_vault_stripe_webhook_secret | default('', true) }}"
+  # Keyed by full address, like every other mailbox: no-reply exists on more
+  # than one domain. Empty if the vault is not loaded, which leaves the contact
+  # form writing to the database without sending.
+  smtp_user: "{{ odyssai_smtp_from }}"
+  smtp_password: "{{ mailcow_vault_mailboxes[odyssai_smtp_from] | default('', true) }}"
 
 odyssai_api_env_dev:
   file: "{{ odyssai_api_dev_env_file }}"
@@ -53,6 +58,10 @@ odyssai_api_env_dev:
   odyssai_env: staging
   stripe_private_key: "{{ odyssai_vault_stripe_dev_private_key | default('', true) }}"
   stripe_webhook_secret: "{{ odyssai_vault_stripe_dev_webhook_secret | default('', true) }}"
+  # Its own mailbox: a message sent while testing must not look like it came
+  # from the real site, and rotating one password must not silence the other.
+  smtp_user: "{{ odyssai_smtp_dev_from }}"
+  smtp_password: "{{ mailcow_vault_mailboxes[odyssai_smtp_dev_from] | default('', true) }}"
 
 odyssai_api_env_targets: >-
   {{ [odyssai_api_env_prod]

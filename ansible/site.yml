@@ -52,6 +52,9 @@
   hosts: portfolio
   vars_files:
     - vaults/heirloom.yml
+    # Le formulaire de contact d'OdyssAI envoie depuis une boite mailcow : le
+    # mot de passe vient de ce vault, indexe par adresse complete.
+    - vaults/mailcow.yml
     - vaults/n8n.yml
     - vaults/odyssai.yml
   roles:
