@@ -95,7 +95,7 @@ odyssai_redis_dev_conf_file: redis-dev.conf
 #
 # Until this is deployed, the API detects the missing extension at boot and
 # falls back to the last few turns. The game is playable, the memory is short.
-odyssai_pg_image: pgvector/pgvector:pg18
+odyssai_pg_image: pgvector/pgvector:pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff
 odyssai_pg_container_name: odyssai-db
 odyssai_pg_dev_container_name: odyssai-db-dev
 odyssai_pg_port: 5432
