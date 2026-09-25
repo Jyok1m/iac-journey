@@ -200,6 +200,11 @@ REALM_CONFIG="$(jq -n \
   supportedLocales: ["fr", "en"],
   defaultLocale: "fr",
 
+  # Le theme annonce ces regles sous le champ, dans les cles
+  # passwordRequirements* de ses messages : Keycloak ne donne pas la politique
+  # au gabarit, qui ne peut que la recopier. Toute modification ici se reporte
+  # la-bas. Pas d apostrophe dans ce bloc : il est delimite par des apostrophes
+  # simples, et la premiere qui passe ferme le programme jq.
   passwordPolicy: "length(12) and notUsername(undefined) and notEmail(undefined) and passwordHistory(3)",
 
   bruteForceProtected: true,

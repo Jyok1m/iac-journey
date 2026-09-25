@@ -6,15 +6,28 @@ le conteneur. Les thèmes fournis par Keycloak (`base`, `keycloak`,
 
 ## odyssai
 
-Copie de travail. La source est `infra/keycloak/themes/odyssai` dans le dépôt
-odyssai, où elle est testée et où vit l'UI kit dont son CSS reprend les tokens.
-Elle est dupliquée ici pour que le rôle reste autonome : une reconstruction du
-serveur ne doit dépendre d'aucun autre dépôt présent sur le poste.
+Ce dossier fait foi. Le thème a d'abord vécu dans `infra/keycloak/themes` du
+dépôt odyssai, d'où il était resynchronisé ; il en a été retiré pour que le
+rôle reste autonome, une reconstruction du serveur ne devant dépendre d'aucun
+autre dépôt présent sur le poste. Son CSS reprend les tokens de l'UI kit
+(`apps/web/odyssai-ui-kit.html`), à reporter à la main quand ils bougent.
 
-Resynchroniser après une évolution du thème, puis rejouer le rôle :
+`parent=base` : seules les pages qui s'écartent de l'original sont surchargées,
+les autres héritent des gabarits nus et prennent leur mise en forme des classes
+déclarées dans `theme.properties`. Une page surchargée est une copie de celle
+de `base` : la rapprocher de l'original à chaque montée de version de Keycloak.
+La version en service se lit dans `defaults/main.yml`, et ses gabarits
+s'extraient de l'image :
 
 ```bash
-rsync -a --delete ~/Code/odyssai/infra/keycloak/themes/odyssai/ \
-  ansible/roles/keycloak/files/themes/odyssai/
+cid=$(docker create quay.io/keycloak/keycloak:26.7)
+docker cp "$cid:/opt/keycloak/lib/lib/main/org.keycloak.keycloak-themes-26.7.3.jar" /tmp/themes.jar
+docker rm -f "$cid"
+unzip -q -o /tmp/themes.jar 'theme/base/login/*' -d /tmp/kc
+```
+
+Après une évolution, rejouer le rôle :
+
+```bash
 ansible-playbook ansible/site.yml --tags keycloak
 ```

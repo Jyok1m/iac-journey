@@ -1,4 +1,4 @@
-<#macro registrationLayout bodyClass="" displayInfo=false displayMessage=true displayRequiredFields=false displayWide=false showAnotherWayIfPresent=true>
+<#macro registrationLayout bodyClass="" displayInfo=false displayMessage=true displayRequiredFields=false displayWide=false showAnotherWayIfPresent=true backTo="app">
 <!DOCTYPE html>
 <html class="${properties.kcHtmlClass!}"<#if realm.internationalizationEnabled> lang="${locale.currentLanguageTag}"</#if>>
 
@@ -85,8 +85,21 @@
       <#nested "form">
 
       <#-- actionUri en second : sur une page d'action, c'est la suite du
-           parcours et non un retour, d'ou l'autre libelle. -->
-      <#if backUrl?has_content>
+           parcours et non un retour, d'ou l'autre libelle.
+
+           backTo="login" prime sur les deux : sur une page ou le compte n'est
+           pas encore utilisable, renvoyer sur OdyssAI ne menerait qu'a revenir
+           se connecter. Le lockup, lui, garde le site pour destination.
+
+           loginRestartFlowUrl et non loginUrl : la seconde vise l'execution en
+           cours, deja depassee sur une page d'action requise, et le lien
+           tombait sur « la page a expire ». C'est l'adresse dont Keycloak se
+           sert lui-meme pour recommencer une connexion. -->
+      <#if backTo == "login">
+        <p class="odyssai-back">
+          <a href="${url.loginRestartFlowUrl}">${kcSanitize(msg("backToLogin"))?no_esc}</a>
+        </p>
+      <#elseif backUrl?has_content>
         <p class="odyssai-back">
           <a href="${backUrl}">${kcSanitize(msg("backToApplication"))?no_esc}</a>
         </p>

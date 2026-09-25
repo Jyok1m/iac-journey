@@ -608,8 +608,49 @@ input[type="submit"]:disabled {
   cursor: not-allowed;
 }
 
-/* « Deconnecter les autres sessions », sur les pages de changement de mot de
-   passe : base y enveloppe la case dans un .checkbox non classe. */
+/* Exigences du mot de passe, annoncees sous le champ avant la saisie plutot
+   qu'en erreur apres coup. Le ton est celui d'une aide : la meme teinte que
+   .odyssai-help, et jamais celle d'une erreur. */
+.odyssai-requirements {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--vellum-3);
+}
+
+.odyssai-requirements-title {
+  margin: 0;
+}
+
+.odyssai-requirements ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.odyssai-requirements li {
+  position: relative;
+  padding-left: 14px;
+}
+
+.odyssai-requirements li + li {
+  margin-top: 2px;
+}
+
+.odyssai-requirements li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--vellum-3);
+}
+
+/* « Deconnecter les autres sessions ». La page de mot de passe ne la montre
+   plus, son gabarit etant surcharge ; restent le TOTP, WebAuthn et le
+   changement d'adresse, ou base enveloppe la case dans un .checkbox non
+   classe. */
 .odyssai-options .checkbox {
   margin: 0;
 }
