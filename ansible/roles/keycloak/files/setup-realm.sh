@@ -217,8 +217,14 @@ REALM_CONFIG="$(jq -n \
 
   accessTokenLifespan: 300,
   accessCodeLifespan: 60,
-  ssoSessionIdleTimeout: 1800,
-  ssoSessionMaxLifespan: 36000,
+
+  # Huit heures d inactivite, trente jours au plus. Une partie se reprend le
+  # lendemain matin sans se reconnecter, ce qu une demi-heure ne permettait
+  # pas : on lit, on reflechit, on revient. C est aussi ssoSessionIdleTimeout
+  # qui borne refresh_expires_in, donc la duree du cookie de session de l api
+  # et de sa cle Redis, l une et l autre calees sur le refresh token.
+  ssoSessionIdleTimeout: 28800,
+  ssoSessionMaxLifespan: 2592000,
   ssoSessionIdleTimeoutRememberMe: 172800,
   ssoSessionMaxLifespanRememberMe: 2592000,
 
