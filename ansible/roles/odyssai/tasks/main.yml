@@ -110,3 +110,29 @@
     remove_orphans: true
     wait: true
     wait_timeout: 300
+
+# Production only: the dev copy is disposable, its database is reset on
+# purpose, and paying twice to keep it would be paying for nothing.
+- name: Schedule database dumps
+  ansible.builtin.include_role:
+    name: backup_postgres
+  vars:
+    backup_postgres_name: "{{ odyssai_app_name }}"
+    backup_postgres_container: "{{ odyssai_pg_container_name }}"
+    backup_postgres_network: "{{ odyssai_app_name }}-internal"
+    # The stack's own image, so pg_dump is never older than the server.
+    backup_postgres_image: "{{ odyssai_pg_image }}"
+    backup_postgres_port: "{{ odyssai_pg_port }}"
+    backup_postgres_user: "{{ odyssai_pg_user }}"
+    backup_postgres_password: "{{ odyssai_vault_pg_password }}"
+    backup_postgres_db: "{{ odyssai_pg_db }}"
+    backup_postgres_restic_repo: "{{ odyssai_backup_restic_repo }}"
+    # Shared with backup_mongo, which owns the names: one restic password and
+    # one S3 key pair for every application. Worth renaming to backup_vault_*
+    # the day the vault is opened for something else.
+    backup_postgres_restic_password: "{{ backup_mongo_vault_restic_password }}"
+    backup_postgres_restic_env:
+      AWS_ACCESS_KEY_ID: "{{ backup_mongo_vault_s3_access_key }}"
+      AWS_SECRET_ACCESS_KEY: "{{ backup_mongo_vault_s3_secret_key }}"
+    backup_postgres_on_calendar: "{{ odyssai_backup_on_calendar }}"
+  tags: [odyssai, backup]

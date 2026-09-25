@@ -1,0 +1,76 @@
+---
+- name: Validate backup inputs for {{ backup_postgres_name }}
+  ansible.builtin.assert:
+    that:
+      - backup_postgres_name | length > 0
+      - backup_postgres_name is match('^[a-z0-9][a-z0-9_-]*$')
+      - backup_postgres_user | length > 0
+      - backup_postgres_password | length > 0
+      - backup_postgres_db | length > 0
+      - backup_postgres_restic_repo | length > 0
+      - backup_postgres_restic_password | length > 0
+    fail_msg: >-
+      backup_postgres needs a name matching [a-z0-9_-], Postgres credentials
+      with a database name, and a restic repository with its password.
+    quiet: true
+
+- name: Install restic for {{ backup_postgres_name }}
+  ansible.builtin.apt:
+    name: "{{ backup_postgres_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create staging and cache directories for {{ backup_postgres_name }}
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - "{{ backup_postgres_local_dir }}"
+    - "{{ backup_postgres_cache_dir }}"
+
+- name: Deploy env file for {{ backup_postgres_name }}
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: /etc/backup-postgres-{{ backup_postgres_name }}.env
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Deploy dump and restore scripts for {{ backup_postgres_name }}
+  ansible.builtin.template:
+    src: "{{ item }}.sh.j2"
+    dest: /usr/local/bin/backup-postgres-{{ item }}-{{ backup_postgres_name }}.sh
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - dump
+    - restore
+
+- name: Deploy systemd units for {{ backup_postgres_name }}
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: /etc/systemd/system/backup-postgres-{{ backup_postgres_name }}.{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - service
+    - timer
+  notify: Reload systemd for backup_postgres
+
+# The timer below is enabled in the same run, so the unit files it points at
+# must already be known to systemd.
+- name: Apply pending unit changes for {{ backup_postgres_name }}
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the dump timer for {{ backup_postgres_name }}
+  ansible.builtin.systemd_service:
+    name: backup-postgres-{{ backup_postgres_name }}.timer
+    state: "{{ backup_postgres_timer_state }}"
+    enabled: "{{ backup_postgres_timer_enabled }}"

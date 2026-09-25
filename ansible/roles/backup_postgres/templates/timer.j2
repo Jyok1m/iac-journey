@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule for the Postgres dump + restic push ({{ backup_postgres_name }})
+
+[Timer]
+OnCalendar={{ backup_postgres_on_calendar }}
+RandomizedDelaySec={{ backup_postgres_randomized_delay }}
+Persistent={{ 'true' if backup_postgres_persistent else 'false' }}
+Unit=backup-postgres-{{ backup_postgres_name }}.service
+
+[Install]
+WantedBy=timers.target

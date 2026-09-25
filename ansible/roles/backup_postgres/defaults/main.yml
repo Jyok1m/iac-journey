@@ -1,0 +1,46 @@
+---
+# In the unit, script and env file names, so [a-z0-9_-] only (asserted).
+backup_postgres_name: ""
+
+# Reached over a Docker network, never a published port: the dump runner joins
+# the stack's own network instead of crossing the host.
+backup_postgres_container: "{{ backup_postgres_name }}-db"
+backup_postgres_network: "{{ backup_postgres_name }}-internal"
+# Must be at least the server's version: pg_dump refuses to dump a newer
+# server. Passing the stack's own image is the way to never think about it.
+backup_postgres_image: postgres:18.4-trixie
+backup_postgres_port: 5432
+
+backup_postgres_user: ""
+backup_postgres_password: ""
+backup_postgres_db: ""
+
+# Root-only staging, trimmed after a successful push.
+backup_postgres_local_dir: /var/backups/postgres/{{ backup_postgres_name }}
+backup_postgres_local_keep: 2
+
+# systemd runs the unit without HOME, so restic finds no cache directory and
+# re-fetches its index from S3 on every operation: slower, and billed per
+# request. Named here rather than in the unit so a manual run uses it too.
+backup_postgres_cache_dir: /var/cache/restic/{{ backup_postgres_name }}
+
+backup_postgres_restic_repo: "s3:https://s3.gra.io.cloud.ovh.net/odyssai"
+backup_postgres_restic_password: ""
+# Handed to restic, shape { KEY: value }.
+backup_postgres_restic_env: {}
+backup_postgres_restic_init: true
+
+backup_postgres_keep_daily: 7
+backup_postgres_keep_weekly: 4
+backup_postgres_keep_monthly: 12
+
+# OnCalendar syntax: `man systemd.time`.
+backup_postgres_on_calendar: daily
+backup_postgres_randomized_delay: 30min
+backup_postgres_persistent: true
+
+backup_postgres_packages:
+  - restic
+
+backup_postgres_timer_state: started
+backup_postgres_timer_enabled: true

@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# Managed by Ansible: backup_postgres ({{ backup_postgres_name }})
+#
+# Usage:
+#   sudo backup-postgres-restore-{{ backup_postgres_name }}.sh <snapshot-id|latest> [--into <db>] [--clean] [--yes]
+#
+# Materializes the snapshot locally and pipes it into pg_restore against the
+# target container. --clean drops each object before recreating it, which is
+# what a real restore needs and what makes this destructive. --yes skips the
+# prompt, for automated restore drills.
+#
+# --into restores to another database on the same server, created on the spot
+# if missing. That is how a backup gets verified without touching production:
+# run against the live database, every COPY collides with the rows already
+# there and the drill proves only that the archive is readable, never that its
+# data comes back. Against an empty database it proves both.
+#
+# Restoring into a live stack is not enough on its own: the API and the worker
+# hold connections and caches. Stop them first, restore, then start them.
+set -euo pipefail
+
+NAME="{{ backup_postgres_name }}"
+LOCAL_DIR="{{ backup_postgres_local_dir }}/restore"
+CONTAINER="{{ backup_postgres_container }}"
+NETWORK="{{ backup_postgres_network }}"
+IMAGE="{{ backup_postgres_image }}"
+PORT="{{ backup_postgres_port }}"
+
+ENV_FILE="/etc/backup-postgres-${NAME}.env"
+if [[ ! -r "${ENV_FILE}" ]]; then
+  echo "[${NAME}] env file ${ENV_FILE} is not readable" >&2
+  exit 1
+fi
+set -a
+# shellcheck disable=SC1090
+source "${ENV_FILE}"
+set +a
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <snapshot-id|latest> [--into <db>] [--clean] [--yes]" >&2
+  exit 64
+fi
+SNAP="$1"
+shift
+
+CLEAN="false"
+ASSUME_YES="false"
+TARGET_DB="${PGDATABASE}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --clean) CLEAN="true" ;;
+    --yes | -y) ASSUME_YES="true" ;;
+    --into)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "--into needs a database name" >&2
+        exit 64
+      fi
+      # Quoted as an identifier further down, but a name is never let through
+      # unchecked: this one reaches psql.
+      if [[ ! "$1" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        echo "Invalid database name: $1" >&2
+        exit 64
+      fi
+      TARGET_DB="$1"
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 64
+      ;;
+  esac
+  shift
+done
+
+mkdir -p "${LOCAL_DIR}"
+chmod 0700 "${LOCAL_DIR}"
+
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+WORKDIR="${LOCAL_DIR}/${TS}-${SNAP}"
+mkdir -p "${WORKDIR}"
+
+echo "[${NAME}] resolving snapshot ${SNAP}"
+restic snapshots --tag "${NAME}" --json "${SNAP}" >/dev/null
+
+echo "[${NAME}] restoring snapshot ${SNAP} → ${WORKDIR}"
+restic restore "${SNAP}" --target "${WORKDIR}" --tag "${NAME}"
+
+ARCHIVE="$(find "${WORKDIR}" -type f -name "${NAME}-*.dump" | head -n 1)"
+if [[ -z "${ARCHIVE}" ]]; then
+  echo "[${NAME}] no archive found in ${WORKDIR}" >&2
+  exit 2
+fi
+
+# A drill database is created here rather than by hand: forgetting it turns
+# the drill into a run against production, which is exactly what --into avoids.
+if [[ "${TARGET_DB}" != "${PGDATABASE}" ]]; then
+  echo "[${NAME}] ensure database ${TARGET_DB} exists"
+  docker run --rm --network "${NETWORK}" \
+    -e PGPASSWORD \
+    "${IMAGE}" \
+    psql --host "${CONTAINER}" --port "${PORT}" --username "${PGUSER}" \
+    --dbname "${PGDATABASE}" --tuples-only --no-align \
+    -c "SELECT 1 FROM pg_database WHERE datname = '${TARGET_DB}'" \
+    | grep -q 1 \
+    || docker run --rm --network "${NETWORK}" \
+      -e PGPASSWORD \
+      "${IMAGE}" \
+      psql --host "${CONTAINER}" --port "${PORT}" --username "${PGUSER}" \
+      --dbname "${PGDATABASE}" \
+      -c "CREATE DATABASE \"${TARGET_DB}\""
+fi
+
+RESTORE_ARGS=(
+  --host "${CONTAINER}"
+  --port "${PORT}"
+  --username "${PGUSER}"
+  --dbname "${TARGET_DB}"
+  --no-owner
+  --no-privileges
+)
+if [[ "${CLEAN}" == "true" ]]; then
+  RESTORE_ARGS+=(--clean --if-exists)
+fi
+
+if [[ "${ASSUME_YES}" != "true" ]]; then
+  read -r -p "[${NAME}] About to pg_restore ${ARCHIVE} into ${CONTAINER}/${TARGET_DB} (clean=${CLEAN}). Continue? [y/N] " ans
+  if [[ "${ans}" != "y" && "${ans}" != "Y" ]]; then
+    echo "[${NAME}] aborted" >&2
+    exit 1
+  fi
+fi
+
+# pg_restore exits non-zero on the first error, and a restore that recreates
+# extensions it does not own reports a few it could not. --exit-on-error is
+# therefore left off, and the count below is what says whether it went well.
+echo "[${NAME}] pg_restore"
+set +e
+docker run --rm -i --network "${NETWORK}" \
+  -e PGPASSWORD \
+  "${IMAGE}" \
+  pg_restore "${RESTORE_ARGS[@]}" < "${ARCHIVE}"
+STATUS=$?
+set -e
+if [[ "${STATUS}" -ne 0 ]]; then
+  echo "[${NAME}] pg_restore reported errors (status ${STATUS}); read them above before trusting this restore" >&2
+fi
+
+echo "[${NAME}] cleanup ${WORKDIR}"
+rm -rf "${WORKDIR}"
+
+echo "[${NAME}] done"
+exit "${STATUS}"

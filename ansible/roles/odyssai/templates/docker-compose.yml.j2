@@ -131,12 +131,16 @@ services:
         reservations:
           memory: 128M
     # node's own fetch: curl and wget are not guaranteed in the slim base.
+    # /health/ready and not /: the latter answers without consulting anything,
+    # so a container whose database was unreachable called itself healthy and
+    # Traefik kept routing players to it. The probe pings Redis and Postgres
+    # and answers 503 when either is missing.
     healthcheck:
       test:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:{{ odyssai_api_port }}/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+        - "fetch('http://127.0.0.1:{{ odyssai_api_port }}/health/ready').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
       interval: 15s
       timeout: 5s
       retries: 5
@@ -384,12 +388,16 @@ services:
           memory: {{ odyssai_api_memory }}
         reservations:
           memory: 128M
+    # /health/ready and not /: the latter answers without consulting anything,
+    # so a container whose database was unreachable called itself healthy and
+    # Traefik kept routing players to it. The probe pings Redis and Postgres
+    # and answers 503 when either is missing.
     healthcheck:
       test:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:{{ odyssai_api_port }}/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+        - "fetch('http://127.0.0.1:{{ odyssai_api_port }}/health/ready').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
       interval: 15s
       timeout: 5s
       retries: 5

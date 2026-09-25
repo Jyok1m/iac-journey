@@ -112,6 +112,12 @@ odyssai_pg_user: odyssai
 odyssai_pg_env_file: odyssai-db.env
 odyssai_pg_dev_env_file: odyssai-db-dev.env
 
+# Daily dump pushed to OVH Object Storage, one bucket per application as
+# ipseis already does. The bucket has to exist and the S3 key pair has to
+# reach it: restic creates the repository inside, never the bucket itself.
+odyssai_backup_restic_repo: s3:https://s3.gra.io.cloud.ovh.net/{{ odyssai_app_name }}
+odyssai_backup_on_calendar: daily
+
 # One realm per environment on the SSO host. The API is the only client and it
 # is confidential; the secret lives in vaults/odyssai.yml.
 odyssai_keycloak_url: https://sso.{{ portfolio_domain_com }}

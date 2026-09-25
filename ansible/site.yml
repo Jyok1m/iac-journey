@@ -57,6 +57,9 @@
     - vaults/mailcow.yml
     - vaults/n8n.yml
     - vaults/odyssai.yml
+    # La sauvegarde de la base d'OdyssAI y prend le mot de passe restic et les
+    # cles S3, partages par toutes les applications.
+    - vaults/backups.yml
   roles:
     - {role: heirloom, tags: [heirloom]}
     - {role: odyssai, tags: [odyssai]}
