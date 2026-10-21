@@ -1,0 +1,106 @@
+---
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ shobukapp_app_dir }}"
+    state: directory
+    owner: root
+    group: "{{ shobukapp_deploy_group }}"
+    mode: "0750"
+
+# No handler: env_file is part of the service config hash, so `recreate: auto`
+# already bounces the container when a value here moves.
+- name: Deploy env files
+  ansible.builtin.template:
+    src: shobukapp-api.env.j2
+    dest: "{{ shobukapp_app_dir }}/{{ item.file }}"
+    owner: root
+    group: "{{ shobukapp_deploy_group }}"
+    mode: "0640"
+  loop: "{{ shobukapp_api_env_targets }}"
+  vars:
+    web_url: "{{ item.web_url }}"
+    pg_host: "{{ item.pg_host }}"
+    pg_password: "{{ item.pg_password }}"
+    app_env: "{{ item.app_env }}"
+    stripe_secret_key: "{{ item.stripe_secret_key }}"
+    stripe_webhook_secret: "{{ item.stripe_webhook_secret }}"
+    mail_from: "{{ item.mail_from }}"
+  no_log: true
+
+- name: Deploy database env files
+  ansible.builtin.template:
+    src: shobukapp-db.env.j2
+    dest: "{{ shobukapp_app_dir }}/{{ item.file }}"
+    owner: root
+    group: "{{ shobukapp_deploy_group }}"
+    mode: "0640"
+  loop: "{{ shobukapp_pg_env_targets }}"
+  vars:
+    pg_password: "{{ item.pg_password }}"
+  no_log: true
+
+- name: Deploy compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ shobukapp_app_dir }}/docker-compose.yml"
+    owner: root
+    group: "{{ shobukapp_deploy_group }}"
+    mode: "0640"
+
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ shobukapp_app_dir }}"
+
+# Before the services: the API opens Postgres at boot, and starting it on a
+# schema it does not know is the failure this prevents. The Jenkins deploy
+# runs the same container at the same point, between its pull and its up.
+- name: Apply database migrations
+  community.docker.docker_compose_v2_run:
+    project_src: "{{ shobukapp_app_dir }}"
+    service: "{{ item }}"
+    profiles:
+      - tools
+    cleanup: true
+  loop: >-
+    {{ ['migrate'] + (['migrate-dev'] if shobukapp_dev_enabled | bool else []) }}
+  register: shobukapp_migrate_run
+  # A no-op on an up-to-date database: reporting changed every run would bury
+  # the one that matters.
+  changed_when: >-
+    'Applying migration' in (shobukapp_migrate_run.stdout | default(''))
+
+# auto recreates a container whose image ID moved, so a fresh push on :dev
+# bounces the dev copy and leaves production alone.
+- name: Deploy services
+  community.docker.docker_compose_v2:
+    project_src: "{{ shobukapp_app_dir }}"
+    state: present
+    recreate: auto
+    remove_orphans: true
+    wait: true
+    wait_timeout: 300
+
+# Production only: the dev copy is disposable. The uploads volume is not part
+# of this dump.
+- name: Schedule database dumps
+  ansible.builtin.include_role:
+    name: backup_postgres
+  vars:
+    backup_postgres_name: "{{ shobukapp_app_name }}"
+    backup_postgres_container: "{{ shobukapp_pg_container_name }}"
+    backup_postgres_network: "{{ shobukapp_app_name }}-internal"
+    # The stack's own image, so pg_dump is never older than the server.
+    backup_postgres_image: "{{ shobukapp_pg_image }}"
+    backup_postgres_port: "{{ shobukapp_pg_port }}"
+    backup_postgres_user: "{{ shobukapp_pg_user }}"
+    backup_postgres_password: "{{ shobukapp_vault_pg_password }}"
+    backup_postgres_db: "{{ shobukapp_pg_db }}"
+    backup_postgres_restic_repo: "{{ shobukapp_backup_restic_repo }}"
+    # Shared with backup_mongo, which owns the names: one restic password and
+    # one S3 key pair for every application.
+    backup_postgres_restic_password: "{{ backup_mongo_vault_restic_password }}"
+    backup_postgres_restic_env:
+      AWS_ACCESS_KEY_ID: "{{ backup_mongo_vault_s3_access_key }}"
+      AWS_SECRET_ACCESS_KEY: "{{ backup_mongo_vault_s3_secret_key }}"
+    backup_postgres_on_calendar: "{{ shobukapp_backup_on_calendar }}"
+  tags: [shobukapp, backup]

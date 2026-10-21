@@ -29,3 +29,4 @@ traefik_internal_aliases:
 # key exists.
 traefik_htpasswd_files:
   odyssai-dev: "{{ traefik_vault_odyssai_dev_basic_auth | default('') }}"
+  shobukapp-dev: "{{ traefik_vault_shobukapp_dev_basic_auth | default('') }}"

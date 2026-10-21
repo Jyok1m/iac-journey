@@ -1,0 +1,40 @@
+---
+# One entry per copy of the stack, so the dev one drops out of every loop at
+# once when shobukapp_dev_enabled is false.
+
+shobukapp_api_env_prod:
+  file: "{{ shobukapp_api_env_file }}"
+  web_url: "{{ shobukapp_site_url }}"
+  pg_host: "{{ shobukapp_pg_container_name }}"
+  pg_password: "{{ shobukapp_vault_pg_password }}"
+  # The only copy allowed a live key, and the only one refused a test key.
+  app_env: production
+  stripe_secret_key: "{{ shobukapp_vault_stripe_secret_key | default('', true) }}"
+  stripe_webhook_secret: "{{ shobukapp_vault_stripe_webhook_secret | default('', true) }}"
+  mail_from: "{{ shobukapp_mail_from }}"
+
+shobukapp_api_env_dev:
+  file: "{{ shobukapp_api_dev_env_file }}"
+  web_url: "{{ shobukapp_dev_site_url }}"
+  pg_host: "{{ shobukapp_pg_dev_container_name }}"
+  pg_password: "{{ shobukapp_vault_pg_dev_password }}"
+  app_env: staging
+  stripe_secret_key: "{{ shobukapp_vault_stripe_dev_secret_key | default('', true) }}"
+  stripe_webhook_secret: "{{ shobukapp_vault_stripe_dev_webhook_secret | default('', true) }}"
+  mail_from: "{{ shobukapp_mail_dev_from }}"
+
+shobukapp_api_env_targets: >-
+  {{ [shobukapp_api_env_prod]
+     + ([shobukapp_api_env_dev] if shobukapp_dev_enabled | bool else []) }}
+
+shobukapp_pg_env_prod:
+  file: "{{ shobukapp_pg_env_file }}"
+  pg_password: "{{ shobukapp_vault_pg_password }}"
+
+shobukapp_pg_env_dev:
+  file: "{{ shobukapp_pg_dev_env_file }}"
+  pg_password: "{{ shobukapp_vault_pg_dev_password }}"
+
+shobukapp_pg_env_targets: >-
+  {{ [shobukapp_pg_env_prod]
+     + ([shobukapp_pg_env_dev] if shobukapp_dev_enabled | bool else []) }}

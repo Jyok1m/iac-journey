@@ -1,0 +1,112 @@
+---
+shobukapp_app_name: shobukapp
+shobukapp_app_dir: /opt/{{ shobukapp_app_name }}
+
+shobukapp_deploy_group: jenkins
+
+# Second copy of the whole stack on :dev images. False stops rendering it.
+shobukapp_dev_enabled: true
+
+# The Jenkinsfile tags on the branch name: `main` is production, `dev` the
+# staging copy.
+shobukapp_image_ns: jyok1m
+
+shobukapp_api_image: "{{ shobukapp_image_ns }}/shobukapp-api:main"
+shobukapp_api_container_name: shobukapp-api
+# Pinned in the image; repeated because the healthcheck and the web rewrite
+# both have to agree with it.
+# No public API host: the browser reaches it through the web rewrite, and a two
+# label name such as api.shobukapp would fall outside both the wildcard DNS
+# record and Cloudflare's edge certificate.
+shobukapp_api_port: 3001
+# Heap under the cgroup limit so V8 aborts with a JS stack trace instead of
+# being SIGKILLed.
+shobukapp_api_memory: 512M
+shobukapp_api_heap_mb: 384
+shobukapp_api_dev_image: "{{ shobukapp_image_ns }}/shobukapp-api:dev"
+shobukapp_api_dev_container_name: shobukapp-api-dev
+# The web image bakes API_URL at build time (Next resolves its rewrites during
+# the build), so both API copies answer to this alias on their own internal
+# network and one value serves both branches. Not `api`: every stack's api
+# service carries that name on traefik-public too, and Docker resolved it there,
+# to another stack's container, ahead of the internal network.
+shobukapp_api_alias: shobukapp-api-internal
+shobukapp_api_url: http://{{ shobukapp_api_alias }}:{{ shobukapp_api_port }}
+
+# Uploaded files (medical certificates, licences, photos). Not covered by the
+# Postgres dump below: losing the volume loses the files.
+shobukapp_storage_dir: /data/storage
+
+# The only thing that applies the schema. Same tag as the copy it migrates, so
+# a build and its schema travel together.
+shobukapp_migrate_image: "{{ shobukapp_image_ns }}/shobukapp-migrate:main"
+shobukapp_migrate_dev_image: "{{ shobukapp_image_ns }}/shobukapp-migrate:dev"
+shobukapp_migrate_memory: 512M
+
+shobukapp_web_image: "{{ shobukapp_image_ns }}/shobukapp-web:main"
+shobukapp_web_container_name: shobukapp-web
+shobukapp_web_port: 3000
+shobukapp_web_memory: 512M
+shobukapp_web_heap_mb: 384
+shobukapp_web_dev_image: "{{ shobukapp_image_ns }}/shobukapp-web:dev"
+shobukapp_web_dev_container_name: shobukapp-web-dev
+
+# Both covered by the proxied *.joachimjasmin.com terraform already publishes.
+shobukapp_web_host: shobukapp.{{ portfolio_domain_com }}
+shobukapp_web_router: Host(`{{ shobukapp_web_host }}`)
+shobukapp_web_dev_host: shobukapp-dev.{{ portfolio_domain_com }}
+shobukapp_web_dev_router: Host(`{{ shobukapp_web_dev_host }}`)
+# The file is mounted by the traefik role and its key lives in
+# vaults/traefik.yml.
+shobukapp_dev_basic_auth: true
+shobukapp_dev_basic_auth_file: /etc/traefik/shobukapp-dev.htpasswd
+shobukapp_dev_basic_auth_realm: ShobukApp staging
+# Its own router without the middleware. It reaches the API through the web
+# rewrite.
+shobukapp_webhook_path: /api/billing/webhook
+shobukapp_web_dev_webhook_router: Host(`{{ shobukapp_web_dev_host }}`) && Path(`{{ shobukapp_webhook_path }}`)
+
+# One instance per copy. Published on the host loopback so psql, migrations and
+# dumps can run from a workstation over an SSH tunnel. 5432 and 15432 belong to
+# odyssai.
+shobukapp_pg_image: pgvector/pgvector:pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff
+shobukapp_pg_container_name: shobukapp-db
+shobukapp_pg_dev_container_name: shobukapp-db-dev
+shobukapp_pg_port: 5432
+shobukapp_pg_port_host: 5433
+shobukapp_pg_port_host_dev: 15433
+shobukapp_pg_memory: 512M
+shobukapp_pg_shared_buffers: 128MB
+shobukapp_pg_effective_cache_size: 384MB
+shobukapp_pg_max_connections: 50
+# Identical on both copies: each instance is a server of its own, so only the
+# passwords differ. Those live in vaults/shobukapp.yml.
+shobukapp_pg_db: shobukapp
+shobukapp_pg_user: shobukapp
+shobukapp_pg_env_file: shobukapp-db.env
+shobukapp_pg_dev_env_file: shobukapp-db-dev.env
+
+# Daily dump pushed to OVH Object Storage, one bucket per application. The
+# bucket has to exist and the S3 key pair has to reach it: restic creates the
+# repository inside, never the bucket itself.
+shobukapp_backup_restic_repo: s3:https://s3.gra.io.cloud.ovh.net/{{ shobukapp_app_name }}
+shobukapp_backup_on_calendar: daily
+
+shobukapp_session_ttl_days: 30
+
+# One mailbox for both copies, told apart by the display name only.
+# The public name, not the container: it is the one the mailcow certificate is
+# issued for, which STARTTLS verifies. 587 is submission (STARTTLS); 465 would
+# be implicit TLS and the two never combine.
+# The password lives in vaults/mailcow.yml; the address is the SMTP username.
+shobukapp_smtp_host: mail.{{ portfolio_domain_com }}
+shobukapp_smtp_port: 587
+shobukapp_smtp_user: no-reply@{{ portfolio_domain_com }}
+shobukapp_mail_from: Shobukan Dojo <{{ shobukapp_smtp_user }}>
+shobukapp_mail_dev_from: Shobukan Dojo (dev) <{{ shobukapp_smtp_user }}>
+
+shobukapp_api_env_file: shobukapp-api.env
+shobukapp_api_dev_env_file: shobukapp-api-dev.env
+
+shobukapp_site_url: https://{{ shobukapp_web_host }}
+shobukapp_dev_site_url: https://{{ shobukapp_web_dev_host }}

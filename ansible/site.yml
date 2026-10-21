@@ -52,17 +52,19 @@
   hosts: portfolio
   vars_files:
     - vaults/heirloom.yml
-    # Le formulaire de contact d'OdyssAI envoie depuis une boite mailcow : le
-    # mot de passe vient de ce vault, indexe par adresse complete.
+    # OdyssAI et ShobukApp envoient depuis des boites mailcow : les mots de
+    # passe viennent de ce vault, indexes par adresse complete.
     - vaults/mailcow.yml
     - vaults/n8n.yml
     - vaults/odyssai.yml
-    # La sauvegarde de la base d'OdyssAI y prend le mot de passe restic et les
-    # cles S3, partages par toutes les applications.
+    - vaults/shobukapp.yml
+    # Les sauvegardes des bases d'OdyssAI et de ShobukApp y prennent le mot de
+    # passe restic et les cles S3, partages par toutes les applications.
     - vaults/backups.yml
   roles:
     - {role: heirloom, tags: [heirloom]}
     - {role: odyssai, tags: [odyssai]}
+    - {role: shobukapp, tags: [shobukapp]}
     - {role: portfolio, tags: [portfolio]}
     - {role: n8n, tags: [n8n]}
   tags: [personal-apps]

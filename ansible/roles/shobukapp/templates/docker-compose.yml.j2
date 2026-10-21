@@ -1,0 +1,360 @@
+---
+services:
+  db:
+    image: {{ shobukapp_pg_image }}
+    container_name: {{ shobukapp_pg_container_name }}
+    restart: unless-stopped
+    env_file: {{ shobukapp_pg_env_file }}
+    command:
+      - postgres
+      - -c
+      - shared_buffers={{ shobukapp_pg_shared_buffers }}
+      - -c
+      - effective_cache_size={{ shobukapp_pg_effective_cache_size }}
+      - -c
+      - max_connections={{ shobukapp_pg_max_connections }}
+    volumes:
+      # Not .../data: since 18 PGDATA sits one level down, and this is the
+      # path the image's own VOLUME declares.
+      - db-data:/var/lib/postgresql
+    # Loopback only: the port is never opened in ufw, so reaching it from off
+    # the host means an SSH tunnel.
+    ports:
+      - "127.0.0.1:{{ shobukapp_pg_port_host }}:{{ shobukapp_pg_port }}/tcp"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ shobukapp_pg_memory }}
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # STOPSIGNAL is SIGINT: a fast shutdown still has to checkpoint, and the
+    # default 10s grace would SIGKILL it into a crash recovery.
+    stop_grace_period: 1m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # shobukapp-internal is internal, so the published port needs the plain
+    # bridge to be reachable at all.
+    networks:
+      - shobukapp-internal
+      - shobukapp-db-host
+
+  # Applies the pending migrations and exits. The `tools` profile keeps it out
+  # of every `up`.
+  migrate:
+    image: {{ shobukapp_migrate_image }}
+    # No container_name: `compose run` names its own, and a fixed one would
+    # collide with a run still on the host.
+    profiles:
+      - tools
+    restart: "no"
+    env_file: {{ shobukapp_api_env_file }}
+    # Starts the database and waits for it, so this holds on a host where
+    # nothing runs yet.
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: {{ shobukapp_migrate_memory }}
+    networks:
+      - shobukapp-internal
+
+  api:
+    image: {{ shobukapp_api_image }}
+    container_name: {{ shobukapp_api_container_name }}
+    restart: unless-stopped
+    env_file: {{ shobukapp_api_env_file }}
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size={{ shobukapp_api_heap_mb }}
+    volumes:
+      - storage-data:{{ shobukapp_storage_dir }}
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ shobukapp_api_memory }}
+        reservations:
+          memory: 128M
+    # node's own fetch: curl and wget are not guaranteed in the slim base.
+    # /health/ready answers 503 when the database is unreachable.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ shobukapp_api_port }}/health/ready').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # traefik-public carries nothing inbound here: it is the only way out to
+    # Stripe and the SMTP server, shobukapp-internal being internal.
+    networks:
+      shobukapp-internal:
+        aliases:
+          - {{ shobukapp_api_alias }}
+      traefik-public: {}
+    labels:
+      - traefik.enable=false
+
+  web:
+    image: {{ shobukapp_web_image }}
+    container_name: {{ shobukapp_web_container_name }}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "{{ shobukapp_web_port }}"
+      HOSTNAME: 0.0.0.0
+      NODE_OPTIONS: --max-old-space-size={{ shobukapp_web_heap_mb }}
+      # Already baked into the build; repeated for whatever reads it at
+      # request time.
+      API_URL: {{ shobukapp_api_url }}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ shobukapp_web_memory }}
+        reservations:
+          memory: 128M
+    # Ordering only, no health gate: an unhealthy API must not hold the public
+    # site down: that is a per-request failure, not a boot one.
+    depends_on:
+      - api
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ shobukapp_web_port }}/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - shobukapp-internal
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ shobukapp_web_container_name }}.rule={{ shobukapp_web_router }}
+      - traefik.http.routers.{{ shobukapp_web_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ shobukapp_web_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ shobukapp_web_container_name }}.loadbalancer.server.port={{ shobukapp_web_port }}
+{% if shobukapp_dev_enabled | bool %}
+
+  db-dev:
+    image: {{ shobukapp_pg_image }}
+    container_name: {{ shobukapp_pg_dev_container_name }}
+    restart: unless-stopped
+    env_file: {{ shobukapp_pg_dev_env_file }}
+    command:
+      - postgres
+      - -c
+      - shared_buffers={{ shobukapp_pg_shared_buffers }}
+      - -c
+      - effective_cache_size={{ shobukapp_pg_effective_cache_size }}
+      - -c
+      - max_connections={{ shobukapp_pg_max_connections }}
+    volumes:
+      - db-dev-data:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:{{ shobukapp_pg_port_host_dev }}:{{ shobukapp_pg_port }}/tcp"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ shobukapp_pg_memory }}
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 1m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # No companion bridge: shobukapp-internal-dev is already a plain one.
+    networks:
+      - shobukapp-internal-dev
+
+  migrate-dev:
+    image: {{ shobukapp_migrate_dev_image }}
+    profiles:
+      - tools
+    restart: "no"
+    env_file: {{ shobukapp_api_dev_env_file }}
+    depends_on:
+      db-dev:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: {{ shobukapp_migrate_memory }}
+    networks:
+      - shobukapp-internal-dev
+
+  api-dev:
+    image: {{ shobukapp_api_dev_image }}
+    container_name: {{ shobukapp_api_dev_container_name }}
+    restart: unless-stopped
+    env_file: {{ shobukapp_api_dev_env_file }}
+    # production here too: same compiled build either way, and development
+    # would only diverge from what production actually runs.
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size={{ shobukapp_api_heap_mb }}
+    volumes:
+      - storage-dev-data:{{ shobukapp_storage_dir }}
+    depends_on:
+      db-dev:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ shobukapp_api_memory }}
+        reservations:
+          memory: 128M
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ shobukapp_api_port }}/health/ready').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      shobukapp-internal-dev:
+        aliases:
+          - {{ shobukapp_api_alias }}
+      traefik-public: {}
+    labels:
+      - traefik.enable=false
+
+  web-dev:
+    image: {{ shobukapp_web_dev_image }}
+    container_name: {{ shobukapp_web_dev_container_name }}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "{{ shobukapp_web_port }}"
+      HOSTNAME: 0.0.0.0
+      NODE_OPTIONS: --max-old-space-size={{ shobukapp_web_heap_mb }}
+      API_URL: {{ shobukapp_api_url }}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: {{ shobukapp_web_memory }}
+        reservations:
+          memory: 128M
+    depends_on:
+      - api-dev
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ shobukapp_web_port }}/').then(r => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - shobukapp-internal-dev
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}.rule={{ shobukapp_web_dev_router }}
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}.entrypoints=websecure
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}.tls.certresolver=letsencrypt
+      - traefik.http.services.{{ shobukapp_web_dev_container_name }}.loadbalancer.server.port={{ shobukapp_web_port }}
+{% if shobukapp_dev_basic_auth | bool %}
+      # usersfile and not users: the hash stays in a file mounted into traefik,
+      # out of the labels that docker inspect exposes to the deploy group.
+      - traefik.http.middlewares.{{ shobukapp_web_dev_container_name }}-auth.basicauth.usersfile={{ shobukapp_dev_basic_auth_file }}
+      - traefik.http.middlewares.{{ shobukapp_web_dev_container_name }}-auth.basicauth.realm={{ shobukapp_dev_basic_auth_realm }}
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}.middlewares={{ shobukapp_web_dev_container_name }}-auth
+      # Stripe cannot answer a basic auth challenge. Explicit priority: Traefik
+      # ranks routers by rule length, and an edit to either rule could flip it.
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}-webhook.rule={{ shobukapp_web_dev_webhook_router }}
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}-webhook.priority=100
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}-webhook.entrypoints=websecure
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}-webhook.tls.certresolver=letsencrypt
+      - traefik.http.routers.{{ shobukapp_web_dev_container_name }}-webhook.service={{ shobukapp_web_dev_container_name }}
+{% endif %}
+{% endif %}
+
+volumes:
+  db-data:
+    name: {{ shobukapp_app_name }}-db-data
+  storage-data:
+    name: {{ shobukapp_app_name }}-storage-data
+{% if shobukapp_dev_enabled | bool %}
+  db-dev-data:
+    name: {{ shobukapp_app_name }}-db-dev-data
+  storage-dev-data:
+    name: {{ shobukapp_app_name }}-storage-dev-data
+{% endif %}
+
+# Compose stamps each network with the key used to declare it and refuses to
+# touch one whose stamp moved: renaming a key strands the running network.
+networks:
+  shobukapp-internal:
+    name: {{ shobukapp_app_name }}-internal
+    internal: true
+  # Only so the production database can publish a port on the host.
+  shobukapp-db-host:
+    name: {{ shobukapp_app_name }}-db-host
+  traefik-public:
+    name: traefik-public
+    external: true
+{% if shobukapp_dev_enabled | bool %}
+  shobukapp-internal-dev:
+    name: {{ shobukapp_app_name }}-internal-dev
+{% endif %}

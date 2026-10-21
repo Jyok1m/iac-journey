@@ -26,6 +26,7 @@ Docker déployées par Ansible sur un serveur OVH unique (`main`, groupe
 | `portfolio`  | Site personnel                              | apex `.com` et `.fr`    |
 | `n8n`        | n8n + PostgreSQL                            | `n8n.<domaine>`         |
 | `ipseis`     | API + MongoDB, en prod et en dev            | `ipseis-backend*.<dom>` |
+| `shobukapp`  | API + web + PostgreSQL, en prod et en dev   | `shobukapp*.<domaine>`  |
 
 `backup_mongo` est un rôle utilitaire, pas une stack : il installe un timer
 systemd qui dump une base Mongo et pousse l'archive dans restic. `ipseis`
@@ -68,7 +69,7 @@ ansible-playbook ansible/site.yml --tags setup          # hardening, vrack, dock
 ansible-playbook ansible/site.yml --tags registries     # relogin sur les registres seuls
 ansible-playbook ansible/site.yml --tags edge           # traefik
 ansible-playbook ansible/site.yml --tags system-apps    # keycloak, komodo, jenkins, monitoring
-ansible-playbook ansible/site.yml --tags personal-apps  # heirloom, portfolio, n8n
+ansible-playbook ansible/site.yml --tags personal-apps  # heirloom, odyssai, shobukapp, portfolio, n8n
 ansible-playbook ansible/site.yml --tags client-apps    # ipseis
 ansible-playbook ansible/site.yml --tags ipseis         # une seule stack
 ```
