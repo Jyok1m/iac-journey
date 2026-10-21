@@ -49,19 +49,25 @@ ipseis_web_dev_maintenance: false
 ipseis_frontend_url: https://{{ ipseis_web_host }}
 ipseis_dev_frontend_url: https://{{ ipseis_web_dev_host }}
 ipseis_nodemailer_email: ipseis.ne.pas.repondre@gmail.com
-# ipseis_mail_to: helenedm@ipseis.fr
-ipseis_mail_to: hdemontabert@yahoo.fr
+ipseis_mail_to: helenedm@ipseis.fr
+# ipseis_mail_to: hdemontabert@yahoo.fr
 ipseis_dev_mail_to: joachim.jasmin-dev@proton.me
 
 # The front is the only public face of the stack; the API's own router is gone
 # and only the WebSocket below stays exposed.
 #
-# Canonical on the .eu, the one zone terraform points at this host. ipseis.fr
-# is in the API's CORS list but is not delegated at all, and Traefik answers
-# ACME over HTTP-01, so a router for it would fail issuance in a loop.
-ipseis_web_host: ipseis.eu
+# Canonical on the .fr. The .eu, the former canonical, keeps answering and is
+# folded into the alias router, so it gets its own certificate and a permanent
+# redirect to the .fr. Every host named here has to be delegated to this
+# server in terraform: Traefik answers ACME over HTTP-01, and a router for an
+# undelegated name fails issuance in a loop.
+ipseis_web_host: ipseis.fr
+ipseis_web_legacy_host: ipseis.eu
 ipseis_web_router: Host(`{{ ipseis_web_host }}`)
-ipseis_web_alias_router: Host(`www.{{ ipseis_web_host }}`)
+ipseis_web_alias_router: >-
+  Host(`www.{{ ipseis_web_host }}`)
+  || Host(`{{ ipseis_web_legacy_host }}`)
+  || Host(`www.{{ ipseis_web_legacy_host }}`)
 ipseis_web_dev_host: dev.{{ ipseis_web_host }}
 ipseis_web_dev_router: Host(`{{ ipseis_web_dev_host }}`)
 

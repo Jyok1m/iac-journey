@@ -3,6 +3,7 @@ zone_ids = {
   "joachimjasmin.com" = "639d0936d344549aad83c6d2d8449e68"
   "heirloom-app.com"  = "a83374c912f2ca3d4a79899ca0bc4b71"
   "ipseis.eu"         = "f84fc29dc9cc31efc7151f606aa44337"
+  "ipseis.fr"         = "e889632be9f764505b8dc152aebb5f2d"
   "odyssai.app"       = "cee30d74ff1e2aa7ea194c56737632a5"
 }
 
