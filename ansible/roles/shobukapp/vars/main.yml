@@ -7,10 +7,13 @@ shobukapp_api_env_prod:
   web_url: "{{ shobukapp_site_url }}"
   pg_host: "{{ shobukapp_pg_container_name }}"
   pg_password: "{{ shobukapp_vault_pg_password }}"
-  # The only copy allowed a live key, and the only one refused a test key.
+  # The only copy allowed a live key. It carries both pairs: an admin switches
+  # between test and live from the dashboard, without a deploy.
   app_env: production
-  stripe_secret_key: "{{ shobukapp_vault_stripe_secret_key | default('', true) }}"
-  stripe_webhook_secret: "{{ shobukapp_vault_stripe_webhook_secret | default('', true) }}"
+  stripe_test_secret_key: "{{ shobukapp_vault_stripe_test_secret_key | default('', true) }}"
+  stripe_test_webhook_secret: "{{ shobukapp_vault_stripe_test_webhook_secret | default('', true) }}"
+  stripe_live_secret_key: "{{ shobukapp_vault_stripe_live_secret_key | default('', true) }}"
+  stripe_live_webhook_secret: "{{ shobukapp_vault_stripe_live_webhook_secret | default('', true) }}"
   mail_from: "{{ shobukapp_mail_from }}"
 
 shobukapp_api_env_dev:
@@ -19,8 +22,10 @@ shobukapp_api_env_dev:
   pg_host: "{{ shobukapp_pg_dev_container_name }}"
   pg_password: "{{ shobukapp_vault_pg_dev_password }}"
   app_env: staging
-  stripe_secret_key: "{{ shobukapp_vault_stripe_dev_secret_key | default('', true) }}"
-  stripe_webhook_secret: "{{ shobukapp_vault_stripe_dev_webhook_secret | default('', true) }}"
+  stripe_test_secret_key: "{{ shobukapp_vault_stripe_dev_secret_key | default('', true) }}"
+  stripe_test_webhook_secret: "{{ shobukapp_vault_stripe_dev_webhook_secret | default('', true) }}"
+  stripe_live_secret_key: ""
+  stripe_live_webhook_secret: ""
   mail_from: "{{ shobukapp_mail_dev_from }}"
 
 shobukapp_api_env_targets: >-

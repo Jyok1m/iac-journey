@@ -22,8 +22,10 @@
     pg_host: "{{ item.pg_host }}"
     pg_password: "{{ item.pg_password }}"
     app_env: "{{ item.app_env }}"
-    stripe_secret_key: "{{ item.stripe_secret_key }}"
-    stripe_webhook_secret: "{{ item.stripe_webhook_secret }}"
+    stripe_test_secret_key: "{{ item.stripe_test_secret_key }}"
+    stripe_test_webhook_secret: "{{ item.stripe_test_webhook_secret }}"
+    stripe_live_secret_key: "{{ item.stripe_live_secret_key }}"
+    stripe_live_webhook_secret: "{{ item.stripe_live_webhook_secret }}"
     mail_from: "{{ item.mail_from }}"
   no_log: true
 
