@@ -162,7 +162,9 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 256M
+          # 256M was OOM-killed every ~30s once the host ran ~60 containers
+          # plus the Jenkins dind overlays.
+          memory: 1G
         reservations:
           memory: 64M
     devices:
