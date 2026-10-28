@@ -84,11 +84,7 @@ IPV6_NETWORK={{ mailcow_ipv6_network }}
 # other stack. Inbound IPv6 to the published ports works regardless.
 ENABLE_IPV6={{ mailcow_enable_ipv6 | lower }}
 
-# Off: since Docker 29.9 the daemon keeps its own rules ahead of the MAILCOW
-# jump in INPUT and FORWARD, and netfilter 1.64 restarts every ~10 s on its
-# position check (upstream #7461, #7522). Bans keep working; ufw still guards
-# the host, and mailcow's internal ports are published on 127.0.0.1 only.
-DISABLE_NETFILTER_ISOLATION_RULE=y
+DISABLE_NETFILTER_ISOLATION_RULE=n
 
 MAILDIR_SUB=Maildir
 SOGO_EXPIRE_SESSION=480
