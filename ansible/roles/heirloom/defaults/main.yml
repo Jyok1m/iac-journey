@@ -38,3 +38,8 @@ heirloom_ai_provider: openai
 heirloom_ai_model: gpt-5-mini
 heirloom_ai_base_url: ""
 heirloom_ai_reasoning_effort: low
+
+# One bucket per application, as for odyssai: restic creates the repository
+# inside, never the bucket itself.
+heirloom_backup_restic_repo: s3:https://s3.gra.io.cloud.ovh.net/{{ heirloom_app_name }}
+heirloom_backup_on_calendar: daily

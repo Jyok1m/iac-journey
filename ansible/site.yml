@@ -32,6 +32,8 @@
     - vaults/mailcow.yml
     - vaults/komodo.yml
     - vaults/monitoring.yml
+    # Mot de passe restic et cles S3 pour la sauvegarde de la base Keycloak.
+    - vaults/backups.yml
   roles:
     - {role: keycloak, tags: [keycloak]}
     - {role: komodo, tags: [komodo]}

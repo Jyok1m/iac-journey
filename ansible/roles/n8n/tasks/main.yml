@@ -39,3 +39,24 @@
     remove_orphans: true
     wait: true
     wait_timeout: 300
+
+# Workflows and credentials live in the database. The credentials stay
+# encrypted with N8N_ENCRYPTION_KEY, which the vault already keeps.
+- name: Schedule database dumps
+  ansible.builtin.include_role:
+    name: backup_postgres
+  vars:
+    backup_postgres_name: "{{ n8n_app_name }}"
+    backup_postgres_container: "{{ n8n_db_container_name }}"
+    backup_postgres_network: "{{ n8n_app_name }}-internal"
+    backup_postgres_image: "{{ n8n_db_image }}"
+    backup_postgres_user: "{{ n8n_vault_db_user }}"
+    backup_postgres_password: "{{ n8n_vault_db_password }}"
+    backup_postgres_db: "{{ n8n_db_name }}"
+    backup_postgres_restic_repo: "{{ n8n_backup_restic_repo }}"
+    backup_postgres_restic_password: "{{ backup_mongo_vault_restic_password }}"
+    backup_postgres_restic_env:
+      AWS_ACCESS_KEY_ID: "{{ backup_mongo_vault_s3_access_key }}"
+      AWS_SECRET_ACCESS_KEY: "{{ backup_mongo_vault_s3_secret_key }}"
+    backup_postgres_on_calendar: "{{ n8n_backup_on_calendar }}"
+  tags: [n8n, backup]

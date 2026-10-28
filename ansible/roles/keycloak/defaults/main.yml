@@ -49,3 +49,8 @@ keycloak_odyssai_realms:
         web_url: http://localhost:3000
 
 keycloak_odyssai_login_theme: odyssai
+
+# One bucket per application, as for odyssai: restic creates the repository
+# inside, never the bucket itself.
+keycloak_backup_restic_repo: s3:https://s3.gra.io.cloud.ovh.net/{{ keycloak_app_name }}
+keycloak_backup_on_calendar: daily

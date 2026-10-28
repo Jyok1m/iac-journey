@@ -62,3 +62,24 @@
     remove_orphans: true
     wait: true
     wait_timeout: 300
+
+# Same wiring as odyssai and shobukapp. The media volume is not covered: it
+# needs a file-level restic job of its own.
+- name: Schedule database dumps
+  ansible.builtin.include_role:
+    name: backup_postgres
+  vars:
+    backup_postgres_name: "{{ heirloom_app_name }}"
+    backup_postgres_container: "{{ heirloom_pg_container_name }}"
+    backup_postgres_network: "{{ heirloom_app_name }}_private"
+    backup_postgres_image: "{{ heirloom_pg_image }}"
+    backup_postgres_user: "{{ heirloom_vault_db_user }}"
+    backup_postgres_password: "{{ heirloom_vault_db_password }}"
+    backup_postgres_db: "{{ heirloom_vault_db }}"
+    backup_postgres_restic_repo: "{{ heirloom_backup_restic_repo }}"
+    backup_postgres_restic_password: "{{ backup_mongo_vault_restic_password }}"
+    backup_postgres_restic_env:
+      AWS_ACCESS_KEY_ID: "{{ backup_mongo_vault_s3_access_key }}"
+      AWS_SECRET_ACCESS_KEY: "{{ backup_mongo_vault_s3_secret_key }}"
+    backup_postgres_on_calendar: "{{ heirloom_backup_on_calendar }}"
+  tags: [heirloom, backup]
