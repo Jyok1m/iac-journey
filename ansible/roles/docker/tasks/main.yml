@@ -59,11 +59,29 @@
     group: root
     mode: "0644"
 
+# Pinned first, downgrade allowed: moving a pin back is how a bad release is
+# undone. Changing the version of a held package needs the hold lifted.
+- name: Install the pinned Docker packages
+  ansible.builtin.apt:
+    name: "{{ docker_package_pins.keys() | zip(docker_package_pins.values()) | map('join', '=') | list }}"
+    state: present
+    update_cache: true
+    allow_downgrade: true
+    allow_change_held_packages: true
+  when: docker_package_pins | length > 0
+
 - name: Install the Docker engine and the Compose plugin
   ansible.builtin.apt:
     name: "{{ docker_packages }}"
     state: present
     update_cache: true
+
+# Held, so a manual `apt upgrade` or unattended-upgrades cannot move them.
+- name: Hold the pinned Docker packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ docker_package_pins.keys() | list }}"
 
 - name: Enable and start Docker
   ansible.builtin.service:
