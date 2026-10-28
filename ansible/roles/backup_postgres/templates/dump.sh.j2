@@ -80,9 +80,13 @@ restic backup \
   "${ARCHIVE}"
 
 echo "[${NAME}] restic forget --prune"
+# Grouped by tags, not by the default host,paths: every archive has its own
+# timestamped path, so each snapshot would be alone in its group and the
+# retention policy would never drop anything.
 restic forget \
   --prune \
   --tag "${NAME}" \
+  --group-by host,tags \
   --keep-daily {{ backup_postgres_keep_daily }} \
   --keep-weekly {{ backup_postgres_keep_weekly }} \
   --keep-monthly {{ backup_postgres_keep_monthly }}
