@@ -15,3 +15,9 @@ n8n_timezone: Europe/Paris
 # The canonical host is the .com, the .fr permanently redirects to it.
 n8n_host: n8n.{{ portfolio_domain_com }}
 n8n_redirect_host: n8n.{{ portfolio_domain_fr }}
+
+# One bucket per application, as for odyssai: restic creates the repository
+# inside, never the bucket itself.
+# The bucket is n8n-b, not n8n: the plain name was not available at OVH.
+n8n_backup_restic_repo: s3:https://s3.gra.io.cloud.ovh.net/n8n-b
+n8n_backup_on_calendar: daily
