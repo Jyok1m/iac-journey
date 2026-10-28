@@ -77,3 +77,15 @@
     groups: docker
     append: true
   loop: "{{ docker_users }}"
+
+# Every stack renders its compose and env files under /opt. Found 0777 on
+# 2026-10-28, set by hand: any local user could drop a directory there that a
+# later deploy or Komodo would pick up. Not recursive, each stack role owns
+# the modes of its own directory.
+- name: Keep /opt writable by root only
+  ansible.builtin.file:
+    path: /opt
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
