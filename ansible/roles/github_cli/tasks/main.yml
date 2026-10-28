@@ -1,0 +1,44 @@
+---
+- name: Create the keyring directory
+  ansible.builtin.file:
+    path: "{{ github_cli_keyring_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Upstream ships the key already dearmored, so it is referenced as is.
+- name: Download the GitHub CLI signing key
+  ansible.builtin.get_url:
+    url: "{{ github_cli_signing_key_url }}"
+    dest: "{{ github_cli_keyring_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Read the dpkg architecture
+  ansible.builtin.command: dpkg --print-architecture
+  register: github_cli_dpkg_arch
+  changed_when: false
+  check_mode: false
+
+# One-line format and file name kept from the upstream instructions: a
+# deb822 file next to the hand-made .list would make apt warn about a
+# duplicate source.
+- name: Render the GitHub CLI apt source
+  ansible.builtin.copy:
+    content: >
+      deb [arch={{ github_cli_dpkg_arch.stdout }}
+      signed-by={{ github_cli_keyring_path }}]
+      {{ github_cli_repo_url }} stable main
+    dest: "{{ github_cli_sources_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# present, never latest: a run of this role must not upgrade anything.
+- name: Install the GitHub CLI
+  ansible.builtin.apt:
+    name: "{{ github_cli_packages }}"
+    state: present
+    update_cache: true
