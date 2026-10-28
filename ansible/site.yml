@@ -9,6 +9,8 @@
     # Everything downstream shells out to docker compose.
     - {role: docker, tags: [docker]}
     - {role: docker_registries, tags: [docker, registries]}
+    # The on-host agent pushes branches and opens pull requests with it.
+    - {role: github_cli, tags: [github_cli]}
   tags: [setup]
 
 # Traefik owns the traefik-public network every stack below joins.
