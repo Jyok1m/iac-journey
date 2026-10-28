@@ -72,3 +72,39 @@
       AWS_ACCESS_KEY_ID: "{{ backup_mongo_vault_s3_access_key }}"
       AWS_SECRET_ACCESS_KEY: "{{ backup_mongo_vault_s3_secret_key }}"
     backup_mongo_on_calendar: "{{ ipseis_backup_on_calendar }}"
+
+# mongo-dump-ipseis predates backup_mongo and was never in this repository:
+# a hand-made timer on the same 03:00 slot, with its own script and env file.
+# Kept running, it dumps the same database twice a night.
+- name: Look for the legacy dump timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/mongo-dump-ipseis.timer
+  register: ipseis_legacy_dump_timer
+  tags: [ipseis, backup]
+
+- name: Stop and disable the legacy dump timer
+  ansible.builtin.systemd_service:
+    name: mongo-dump-ipseis.timer
+    state: stopped
+    enabled: false
+  when: ipseis_legacy_dump_timer.stat.exists
+  tags: [ipseis, backup]
+
+# The local dumps it left behind are not touched.
+- name: Remove the legacy dump units, script and env file
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/mongo-dump-ipseis.timer
+    - /etc/systemd/system/mongo-dump-ipseis.service
+    - /usr/local/bin/mongo-dump-ipseis.sh
+    - /etc/mongo-dump-ipseis.env
+  register: ipseis_legacy_dump_removed
+  tags: [ipseis, backup]
+
+- name: Reload systemd after removing the legacy units
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: ipseis_legacy_dump_removed is changed
+  tags: [ipseis, backup]
