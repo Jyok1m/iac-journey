@@ -19,6 +19,17 @@ docker_packages:
   # What docker_compose_v2 shells out to; every stack role needs it.
   - docker-compose-plugin
 
+# Docker 29.9 keeps its own rules ahead of the MAILCOW jump in INPUT and
+# FORWARD, and mailcow's netfilter 1.64 then restarts every 10 s, wiping its
+# bans each time. 29.1.2 is the last release it ran cleanly against here.
+# Empty the dict to follow the repository again, and drop the holds by hand
+# (apt-mark unhold) or with a selection: install task.
+docker_package_pins:
+  docker-ce: 5:29.1.2-1~debian.13~trixie
+  docker-ce-cli: 5:29.1.2-1~debian.13~trixie
+  docker-ce-rootless-extras: 5:29.1.2-1~debian.13~trixie
+  containerd.io: 2.2.0-2~debian.13~trixie
+
 docker_service_state: started
 docker_service_enabled: true
 
