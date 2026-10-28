@@ -96,3 +96,23 @@
   no_log: true
   # Le script est idempotent : rien a signaler tant qu'il sort en 0.
   changed_when: false
+
+# Realms, clients and users only exist in this database.
+- name: Schedule database dumps
+  ansible.builtin.include_role:
+    name: backup_postgres
+  vars:
+    backup_postgres_name: "{{ keycloak_app_name }}"
+    backup_postgres_container: "{{ keycloak_pg_container_name }}"
+    backup_postgres_network: "{{ keycloak_app_name }}_internal"
+    backup_postgres_image: "{{ keycloak_pg_image }}"
+    backup_postgres_user: "{{ keycloak_vault_db_user }}"
+    backup_postgres_password: "{{ keycloak_vault_db_password }}"
+    backup_postgres_db: "{{ keycloak_vault_db }}"
+    backup_postgres_restic_repo: "{{ keycloak_backup_restic_repo }}"
+    backup_postgres_restic_password: "{{ backup_mongo_vault_restic_password }}"
+    backup_postgres_restic_env:
+      AWS_ACCESS_KEY_ID: "{{ backup_mongo_vault_s3_access_key }}"
+      AWS_SECRET_ACCESS_KEY: "{{ backup_mongo_vault_s3_secret_key }}"
+    backup_postgres_on_calendar: "{{ keycloak_backup_on_calendar }}"
+  tags: [keycloak, backup]
